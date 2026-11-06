@@ -1,0 +1,670 @@
+package app.webgen.generator
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
+import android.net.Uri
+import android.os.Bundle
+import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.Switch
+import android.widget.TextView
+import android.widget.Toast
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URI
+import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.concurrent.thread
+
+class MainActivity : Activity() {
+
+    private lateinit var urlInput: EditText
+    private lateinit var nameInput: EditText
+    private lateinit var pkgInput: EditText
+    private lateinit var permMic: Switch
+    private lateinit var permCamera: Switch
+    private lateinit var permLocation: Switch
+    private lateinit var permNotifications: Switch
+    private lateinit var repoInput: EditText
+    private lateinit var iconPreview: ImageView
+    private lateinit var iconStatus: TextView
+    private lateinit var statusText: TextView
+    private lateinit var generateButton: Button
+    private lateinit var historyList: LinearLayout
+
+    private var selectedIcon: Bitmap? = null
+    private var pkgUserEdited = false
+    private var settingPkg = false
+
+    private val history = mutableListOf<JSONObject>()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        urlInput = findViewById(R.id.urlInput)
+        nameInput = findViewById(R.id.nameInput)
+        pkgInput = findViewById(R.id.pkgInput)
+        permMic = findViewById(R.id.permMic)
+        permCamera = findViewById(R.id.permCamera)
+        permLocation = findViewById(R.id.permLocation)
+        permNotifications = findViewById(R.id.permNotifications)
+        repoInput = findViewById(R.id.repoInput)
+        iconPreview = findViewById(R.id.iconPreview)
+        iconStatus = findViewById(R.id.iconStatus)
+        statusText = findViewById(R.id.statusText)
+        generateButton = findViewById(R.id.generateButton)
+        historyList = findViewById(R.id.historyList)
+
+        pkgInput.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {
+                if (!settingPkg) pkgUserEdited = true
+            }
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        })
+        urlInput.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {
+                if (!pkgUserEdited) {
+                    val suggestion = suggestPackage(urlInput.text.toString())
+                    if (suggestion.isNotEmpty()) {
+                        settingPkg = true
+                        pkgInput.setText(suggestion)
+                        settingPkg = false
+                    }
+                }
+            }
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        })
+
+        findViewById<Button>(R.id.faviconButton).setOnClickListener { fetchFavicon() }
+        findViewById<Button>(R.id.pickButton).setOnClickListener { pickImage() }
+        generateButton.setOnClickListener { generate() }
+
+        // Settings: GitHub repo used for the update check (persisted).
+        repoInput.setText(prefs().getString(KEY_REPO, ""))
+        repoInput.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {
+                prefs().edit().putString(KEY_REPO, s?.toString()?.trim() ?: "").apply()
+            }
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        })
+        findViewById<Button>(R.id.checkUpdateButton).setOnClickListener {
+            checkGeneratorUpdate(manual = true)
+        }
+
+        loadHistory()
+        refreshHistory()
+
+        // Silent update check at startup (only when a repo is configured).
+        if (configuredRepo() != null) {
+            checkGeneratorUpdate(manual = false)
+        }
+    }
+
+    private fun prefs() = getSharedPreferences("settings", MODE_PRIVATE)
+
+    /** "owner/name" from the settings field, or null when unset/invalid. */
+    private fun configuredRepo(): String? {
+        val repo = repoInput.text.toString().trim()
+        return if (REPO_RE.matches(repo)) repo else null
+    }
+
+    private fun updateFeedUrlFor(repo: String): String {
+        return "https://api.github.com/repos/$repo/releases/latest"
+    }
+
+    // ------------------------------------------------------------------
+    // package suggestion
+    // ------------------------------------------------------------------
+
+    private fun normalizeUrl(raw: String): String {
+        val u = raw.trim()
+        return if (u.startsWith("http://") || u.startsWith("https://")) u else "https://$u"
+    }
+
+    private fun hostOf(rawUrl: String): String? {
+        return try {
+            URI(normalizeUrl(rawUrl)).host
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun suggestPackage(rawUrl: String): String {
+        val host = hostOf(rawUrl) ?: return ""
+        val labels = host.removePrefix("www.").split(".")
+            .map { part ->
+                var p = part.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "")
+                if (p.isNotEmpty() && p[0].isDigit()) p = "a$p"
+                p
+            }
+            .filter { it.isNotEmpty() }
+        if (labels.isEmpty()) return ""
+        return "app.webgen." + labels.reversed().joinToString(".")
+    }
+
+    // ------------------------------------------------------------------
+    // icon acquisition
+    // ------------------------------------------------------------------
+
+    private fun setIcon(bmp: Bitmap, status: String) {
+        selectedIcon = bmp
+        iconPreview.setImageBitmap(bmp)
+        iconStatus.text = status
+    }
+
+    private fun fetchFavicon() {
+        val rawUrl = urlInput.text.toString()
+        if (rawUrl.isBlank()) {
+            toast("先にサイトURLを入力してください")
+            return
+        }
+        iconStatus.text = "アイコンを取得しています…"
+        thread {
+            val bmp = try {
+                fetchSiteIcon(normalizeUrl(rawUrl))
+            } catch (e: Exception) {
+                null
+            }
+            runOnUiThread {
+                if (bmp != null) {
+                    setIcon(bmp, "サイトのアイコンを取得しました（${bmp.width}×${bmp.height}）")
+                } else {
+                    iconStatus.text = "サイトのアイコンを取得できませんでした（頭文字アイコンが自動生成されます）"
+                }
+            }
+        }
+    }
+
+    private fun fetchSiteIcon(pageUrl: String): Bitmap? {
+        val candidates = mutableListOf<String>()
+        // 1) candidates declared in the page HTML (apple-touch-icon preferred)
+        try {
+            val html = httpGetText(pageUrl, 200_000)
+            if (html != null) {
+                val tagRe = Regex("<link[^>]+>", RegexOption.IGNORE_CASE)
+                val hrefRe = Regex("""href\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+                var apple: String? = null
+                var icon: String? = null
+                for (m in tagRe.findAll(html)) {
+                    val tag = m.value
+                    val href = hrefRe.find(tag)?.groupValues?.get(1) ?: continue
+                    when {
+                        tag.contains("apple-touch-icon", ignoreCase = true) ->
+                            if (apple == null) apple = href
+                        tag.contains("icon", ignoreCase = true) ->
+                            if (icon == null) icon = href
+                    }
+                }
+                apple?.let { candidates.add(URL(URL(pageUrl), it).toString()) }
+                icon?.let { candidates.add(URL(URL(pageUrl), it).toString()) }
+            }
+        } catch (e: Exception) {
+            // fall through to well-known paths
+        }
+        // 2) well-known paths
+        val base = URL(pageUrl)
+        val root = "${base.protocol}://${base.host}" + if (base.port > 0) ":${base.port}" else ""
+        candidates.add("$root/apple-touch-icon.png")
+        candidates.add("$root/favicon.png")
+        candidates.add("$root/favicon.ico")
+
+        for (candidate in candidates.distinct()) {
+            try {
+                val bmp = httpGetBitmap(candidate)
+                if (bmp != null && bmp.width >= 16 && bmp.height >= 16) return bmp
+            } catch (e: Exception) {
+                // try next candidate
+            }
+        }
+        return null
+    }
+
+    private fun openConn(url: String): HttpURLConnection {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.instanceFollowRedirects = true
+        conn.connectTimeout = 8000
+        conn.readTimeout = 8000
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) WebGen")
+        return conn
+    }
+
+    private fun httpGetText(url: String, maxChars: Int): String? {
+        val conn = openConn(url)
+        conn.inputStream.use { input ->
+            val bytes = input.readBytes()
+            val text = String(bytes, Charsets.UTF_8)
+            return if (text.length > maxChars) text.substring(0, maxChars) else text
+        }
+    }
+
+    private fun httpGetBitmap(url: String): Bitmap? {
+        val conn = openConn(url)
+        conn.inputStream.use { input ->
+            return BitmapFactory.decodeStream(input)
+        }
+    }
+
+    private fun pickImage() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
+        @Suppress("DEPRECATION")
+        startActivityForResult(Intent.createChooser(intent, "アイコン画像を選ぶ"), REQ_PICK_IMAGE)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PICK_IMAGE && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            try {
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val bmp = BitmapFactory.decodeStream(input)
+                    if (bmp != null) {
+                        setIcon(bmp, "端末の画像をアイコンに設定しました（${bmp.width}×${bmp.height}）")
+                    } else {
+                        toast("画像を読み込めませんでした")
+                    }
+                }
+            } catch (e: Exception) {
+                toast("画像の読み込みに失敗しました: ${e.message}")
+            }
+        }
+    }
+
+    private fun makeInitialIcon(name: String): Bitmap {
+        val size = 512
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val colors = intArrayOf(
+            0xFF3F51B5.toInt(), 0xFF00897B.toInt(), 0xFF6A1B9A.toInt(),
+            0xFFAD1457.toInt(), 0xFFEF6C00.toInt(), 0xFF2E7D32.toInt(),
+            0xFF1565C0.toInt(), 0xFF4E342E.toInt()
+        )
+        val bg = colors[Math.floorMod(name.hashCode(), colors.size)]
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bg }
+        canvas.drawRoundRect(RectF(0f, 0f, size.toFloat(), size.toFloat()), 112f, 112f, paint)
+        val letter = name.trim().firstOrNull()?.toString() ?: "W"
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 250f
+            isFakeBoldText = true
+            textAlign = Paint.Align.CENTER
+        }
+        val metrics = textPaint.fontMetrics
+        val baseline = size / 2f - (metrics.ascent + metrics.descent) / 2f
+        canvas.drawText(letter, size / 2f, baseline, textPaint)
+        return bmp
+    }
+
+    // ------------------------------------------------------------------
+    // generation
+    // ------------------------------------------------------------------
+
+    private fun generate() {
+        val rawUrl = urlInput.text.toString().trim()
+        if (rawUrl.isEmpty()) {
+            toast("サイトURLを入力してください")
+            return
+        }
+        val url = normalizeUrl(rawUrl)
+        var appName = nameInput.text.toString().trim()
+        if (appName.isEmpty()) {
+            val host = hostOf(url)
+            appName = host?.removePrefix("www.")?.split(".")?.firstOrNull()
+                ?.replaceFirstChar { it.uppercase() } ?: "Site App"
+            nameInput.setText(appName)
+        }
+        val pkg = pkgInput.text.toString().trim()
+            .ifEmpty { suggestPackage(url) }
+        if (!PACKAGE_RE.matches(pkg)) {
+            statusText.text = "パッケージ名が不正です: $pkg（例: app.webgen.com.example）"
+            return
+        }
+        if (pkg == "app.webgen.template" || pkg == "app.webgen.generator") {
+            statusText.text = "そのパッケージ名は予約済みです。別の名前にしてください"
+            return
+        }
+        val icon = selectedIcon ?: makeInitialIcon(appName).also { iconPreview.setImageBitmap(it) }
+        val perms = currentPermissionToggles()
+        val repo = configuredRepo()
+        val feedUrl = repo?.let { updateFeedUrlFor(it) }
+
+        generateButton.isEnabled = false
+        statusText.text = "生成しています…（初回は署名キーの生成に少し時間がかかります）"
+        thread {
+            try {
+                val file = GeneratorEngine.generate(this, url, appName, pkg, icon, perms, feedUrl)
+                val entry = JSONObject().apply {
+                    put("name", appName)
+                    put("url", url)
+                    put("pkg", pkg)
+                    put("path", file.absolutePath)
+                    put("created", System.currentTimeMillis())
+                    put("templateVersion", GeneratorEngine.TEMPLATE_VERSION)
+                    put("perms", perms)
+                    if (repo != null) put("repo", repo)
+                }
+                runOnUiThread {
+                    history.add(0, entry)
+                    saveHistory()
+                    refreshHistory()
+                    generateButton.isEnabled = true
+                    statusText.text = "生成しました: ${file.absolutePath}"
+                    toast("APKを生成しました")
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    generateButton.isEnabled = true
+                    statusText.text = "生成に失敗しました: ${e.javaClass.simpleName}: ${e.message}"
+                }
+            }
+        }
+    }
+
+    private fun currentPermissionToggles(): JSONObject {
+        return JSONObject().apply {
+            put("microphone", permMic.isChecked)
+            put("camera", permCamera.isChecked)
+            put("location", permLocation.isChecked)
+            put("notifications", permNotifications.isChecked)
+        }
+    }
+
+    /**
+     * Rebuilds an existing history entry with the CURRENT bundled template
+     * (same URL / name / package / permissions). The icon is recovered
+     * from the previously generated APK when possible. The entry is
+     * updated in place; installing the result uses the normal flow.
+     */
+    private fun regenerate(entry: JSONObject) {
+        val url = entry.optString("url")
+        val appName = entry.optString("name")
+        val pkg = entry.optString("pkg")
+        if (url.isEmpty() || pkg.isEmpty()) {
+            toast("再生成に必要な情報が履歴にありません")
+            return
+        }
+        val perms = entry.optJSONObject("perms") ?: JSONObject()
+        val repo = entry.optString("repo").ifEmpty { configuredRepo() ?: "" }
+        val feedUrl = if (repo.isNotEmpty()) updateFeedUrlFor(repo) else null
+        val oldFile = File(entry.optString("path"))
+        val icon = GeneratorEngine.extractIcon(oldFile) ?: makeInitialIcon(appName)
+
+        statusText.text = "再生成しています…: $appName"
+        thread {
+            try {
+                val file = GeneratorEngine.generate(this, url, appName, pkg, icon, perms, feedUrl)
+                runOnUiThread {
+                    entry.put("path", file.absolutePath)
+                    entry.put("created", System.currentTimeMillis())
+                    entry.put("templateVersion", GeneratorEngine.TEMPLATE_VERSION)
+                    if (repo.isNotEmpty()) entry.put("repo", repo)
+                    saveHistory()
+                    refreshHistory()
+                    statusText.text = "再生成しました: ${file.absolutePath}（「インストール」から上書きできます）"
+                    toast("再生成しました")
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    statusText.text = "再生成に失敗しました: ${e.javaClass.simpleName}: ${e.message}"
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // generator self update check (GitHub Releases)
+    // ------------------------------------------------------------------
+
+    private fun checkGeneratorUpdate(manual: Boolean) {
+        val repo = configuredRepo()
+        if (repo == null) {
+            if (manual) toast("先に GitHub リポジトリ（owner/name）を設定してください")
+            return
+        }
+        if (manual) statusText.text = "更新を確認しています…"
+        thread {
+            var error: String? = null
+            var tag: String? = null
+            var pageUrl: String? = null
+            try {
+                val conn = openConn(updateFeedUrlFor(repo))
+                conn.setRequestProperty("Accept", "application/vnd.github+json")
+                val text = conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                val json = JSONObject(text)
+                tag = json.optString("tag_name", "")
+                pageUrl = json.optString("html_url", "https://github.com/$repo/releases")
+            } catch (e: Exception) {
+                error = e.message ?: e.javaClass.simpleName
+            }
+            runOnUiThread {
+                when {
+                    error != null -> {
+                        if (manual) {
+                            statusText.text = "更新の確認に失敗しました: $error"
+                        }
+                    }
+                    tag.isNullOrEmpty() -> {
+                        if (manual) statusText.text = "リリースが見つかりませんでした"
+                    }
+                    compareVersions(tag!!, GeneratorEngine.APP_VERSION_NAME) > 0 -> {
+                        showGeneratorUpdateDialog(tag!!, pageUrl!!)
+                    }
+                    else -> {
+                        if (manual) {
+                            statusText.text =
+                                "最新です（アプリカ v${GeneratorEngine.APP_VERSION_NAME}）"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showGeneratorUpdateDialog(tag: String, pageUrl: String) {
+        if (isFinishing) return
+        AlertDialog.Builder(this)
+            .setTitle("新しいバージョンがあります")
+            .setMessage(
+                "アプリカ $tag が GitHub Releases で公開されています。" +
+                    "新しいAPKも同じ署名キーで署名されているため、そのまま上書きインストールできます。"
+            )
+            .setPositiveButton("リリースページを開く") { _, _ ->
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(pageUrl)))
+                } catch (e: Exception) {
+                    toast("ブラウザを開けませんでした")
+                }
+            }
+            .setNegativeButton("あとで", null)
+            .show()
+    }
+
+    /** Numeric dotted-version compare: "v1.10" > "1.2" etc. */
+    private fun compareVersions(a: String, b: String): Int {
+        val pa = parseVersion(a)
+        val pb = parseVersion(b)
+        for (i in 0 until maxOf(pa.size, pb.size)) {
+            val x = pa.getOrElse(i) { 0 }
+            val y = pb.getOrElse(i) { 0 }
+            if (x != y) return x.compareTo(y)
+        }
+        return 0
+    }
+
+    private fun parseVersion(v: String): List<Int> {
+        val core = v.trim().removePrefix("v").removePrefix("V")
+            .substringBefore("-")
+        return core.split(".").map { part ->
+            part.takeWhile { it.isDigit() }.toIntOrNull() ?: 0
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // history
+    // ------------------------------------------------------------------
+
+    private fun historyFile() = File(filesDir, "history.json")
+
+    private fun loadHistory() {
+        try {
+            val f = historyFile()
+            if (f.exists()) {
+                val arr = JSONArray(f.readText())
+                for (i in 0 until arr.length()) history.add(arr.getJSONObject(i))
+            }
+        } catch (e: Exception) {
+            // corrupted history is non-fatal; start fresh
+        }
+    }
+
+    private fun saveHistory() {
+        try {
+            val arr = JSONArray()
+            for (e in history) arr.put(e)
+            historyFile().writeText(arr.toString())
+        } catch (e: Exception) {
+            // ignore: generation result itself is already on disk
+        }
+    }
+
+    private fun refreshHistory() {
+        historyList.removeAllViews()
+        if (history.isEmpty()) {
+            val tv = TextView(this).apply { text = "まだ生成したAPKはありません" }
+            historyList.addView(tv)
+            return
+        }
+        val fmt = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.JAPAN)
+        for (entry in history) {
+            val name = entry.optString("name")
+            val file = File(entry.optString("path"))
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, 20, 0, 8)
+            }
+            container.addView(TextView(this).apply {
+                text = name
+                textSize = 16f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            })
+            val entryTemplate = entry.optInt("templateVersion", 0)
+            val updateAvailable = entryTemplate < GeneratorEngine.TEMPLATE_VERSION
+            container.addView(TextView(this).apply {
+                text = "${entry.optString("url")}\n" +
+                    "${entry.optString("pkg")} · ${fmt.format(Date(entry.optLong("created")))}" +
+                    "\nテンプレート v$entryTemplate" +
+                    (if (updateAvailable) " → v${GeneratorEngine.TEMPLATE_VERSION} に更新できます" else "") +
+                    if (file.exists()) "" else "\n（ファイルが見つかりません）"
+                textSize = 12f
+            })
+            if (updateAvailable) {
+                container.addView(TextView(this).apply {
+                    text = "★ 更新あり（新しいテンプレートで作り直せます）"
+                    textSize = 13f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                })
+            }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.START
+            }
+            row.addView(smallButton("インストール") { installApk(file) })
+            if (updateAvailable) {
+                row.addView(smallButton("再生成") { regenerate(entry) })
+            }
+            row.addView(smallButton("共有") { shareApk(file) })
+            row.addView(smallButton("削除") {
+                file.delete()
+                history.remove(entry)
+                saveHistory()
+                refreshHistory()
+                toast("削除しました")
+            })
+            container.addView(row)
+            historyList.addView(container)
+        }
+    }
+
+    private fun smallButton(label: String, onClick: () -> Unit): Button {
+        return Button(this).apply {
+            text = label
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun installApk(file: File) {
+        if (!file.exists()) {
+            toast("ファイルが見つかりません")
+            return
+        }
+        val uri = GenFileProvider.uriFor(file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            toast("インストーラを起動できませんでした。このアプリからのインストール許可を確認してください")
+            try {
+                startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:$packageName")
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (ignored: Exception) {
+            }
+        }
+    }
+
+    private fun shareApk(file: File) {
+        if (!file.exists()) {
+            toast("ファイルが見つかりません")
+            return
+        }
+        val uri = GenFileProvider.uriFor(file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/vnd.android.package-archive"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        }
+        startActivity(Intent.createChooser(intent, "APKを共有"))
+    }
+
+    private fun toast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    companion object {
+        private const val REQ_PICK_IMAGE = 42
+        private const val KEY_REPO = "gh_repo"
+        private val PACKAGE_RE = Regex("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$")
+        private val REPO_RE = Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+    }
+}
