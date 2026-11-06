@@ -72,6 +72,40 @@
                 android:textColor="@color/ink"/>
         </LinearLayout>
 
+        <!-- Card: appearance -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="表示"
+                android:textColor="@color/ink"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="アプリカ本体のテーマです。生成したアプリは、サイト側のダークモード対応に連動します。"
+                android:textColor="@color/ink_sub"
+                android:textSize="13sp" />
+
+            <Spinner
+                android:id="@+id/themeSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:padding="10dp" />
+        </LinearLayout>
+
         <!-- Card: updates -->
         <LinearLayout
             android:layout_width="match_parent"

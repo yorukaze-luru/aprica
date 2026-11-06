@@ -1,14 +1,15 @@
 package app.webgen.generator
 
 import android.app.Activity
-import android.app.AlertDialog
-import android.content.Intent
-import android.net.Uri
+import android.content.Context
 import android.os.Bundle
+import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
-import android.widget.Toast
 
 /**
  * Settings page (v1.3): everything that is not APK creation lives here,
@@ -25,9 +26,18 @@ class SettingsActivity : Activity() {
 
     private lateinit var updateStatus: TextView
 
+    private var appliedThemeMode = -1
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(ThemePrefs.wrap(newBase))
+        appliedThemeMode = ThemePrefs.getMode(newBase)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+
+        setupThemeSpinner()
 
         bindDefaultSwitch(R.id.defMic, MainActivity.KEY_DEF_MIC)
         bindDefaultSwitch(R.id.defCamera, MainActivity.KEY_DEF_CAMERA)
@@ -45,6 +55,41 @@ class SettingsActivity : Activity() {
 
     private fun prefs() = getSharedPreferences("settings", MODE_PRIVATE)
 
+    private fun setupThemeSpinner() {
+        val spinner = findViewById<Spinner>(R.id.themeSpinner)
+        val labels = listOf("端末の設定に合わせる", "ライト", "ダーク")
+        spinner.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item, labels
+        )
+        var binding = true
+        spinner.setSelection(ThemePrefs.getMode(this))
+        binding = false
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?, view: View?, position: Int, id: Long
+            ) {
+                styleSpinnerText(spinner)
+                if (binding) return
+                if (position != ThemePrefs.getMode(this@SettingsActivity)) {
+                    ThemePrefs.setMode(this@SettingsActivity, position)
+                    recreate()
+                }
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        spinner.post { styleSpinnerText(spinner) }
+    }
+
+    /** The spinner's closed view uses the theme's default text color,
+     *  which stays dark; restyle it for the dark card background. */
+    private fun styleSpinnerText(spinner: Spinner) {
+        val tv = spinner.getChildAt(0) as? TextView ?: return
+        tv.setTextColor(
+            if (ThemePrefs.isNight(this)) 0xFFE8F4F1.toInt() else 0xFF173A3A.toInt()
+        )
+    }
+
     private fun bindDefaultSwitch(id: Int, key: String) {
         val sw = findViewById<Switch>(id)
         sw.isChecked = prefs().getBoolean(key, false)
@@ -61,7 +106,7 @@ class SettingsActivity : Activity() {
 
     private fun checkUpdate() {
         updateStatus.text = "更新を確認しています…"
-        UpdateChecker.fetchLatest(UpdateChecker.DEFAULT_REPO) { tag, pageUrl, error ->
+        UpdateChecker.fetchLatest(UpdateChecker.DEFAULT_REPO) { tag, pageUrl, assetUrl, error ->
             runOnUiThread {
                 when {
                     error != null ->
@@ -73,7 +118,7 @@ class SettingsActivity : Activity() {
                     ) > 0 -> {
                         updateStatus.text =
                             "新しいバージョン $tag があります"
-                        showUpdateDialog(tag, pageUrl!!)
+                        UpdateFlow.prompt(this, tag, pageUrl!!, assetUrl)
                     }
                     else ->
                         updateStatus.text =
@@ -83,22 +128,4 @@ class SettingsActivity : Activity() {
         }
     }
 
-    private fun showUpdateDialog(tag: String, pageUrl: String) {
-        if (isFinishing) return
-        AlertDialog.Builder(this)
-            .setTitle("新しいバージョンがあります")
-            .setMessage(
-                "アプリカ $tag が GitHub Releases で公開されています。" +
-                    "新しいAPKも同じ署名キーで署名されているため、そのまま上書きインストールできます。"
-            )
-            .setPositiveButton("リリースページを開く") { _, _ ->
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(pageUrl)))
-                } catch (e: Exception) {
-                    Toast.makeText(this, "ブラウザを開けませんでした", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton("あとで", null)
-            .show()
-    }
 }

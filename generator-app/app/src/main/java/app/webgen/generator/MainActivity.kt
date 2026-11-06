@@ -2,6 +2,7 @@ package app.webgen.generator
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -54,6 +55,22 @@ class MainActivity : Activity() {
     private var settingPkg = false
 
     private val history = mutableListOf<JSONObject>()
+
+    private var appliedThemeMode = -1
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(ThemePrefs.wrap(newBase))
+        appliedThemeMode = ThemePrefs.getMode(newBase)
+    }
+
+    private fun cInk() =
+        if (ThemePrefs.isNight(this)) 0xFFE8F4F1.toInt() else 0xFF173A3A.toInt()
+
+    private fun cSub() =
+        if (ThemePrefs.isNight(this)) 0xFF9DB8B3.toInt() else 0xFF57726F.toInt()
+
+    private fun cAccentText() =
+        if (ThemePrefs.isNight(this)) 0xFF35D0BA.toInt() else 0xFF0A6E6D.toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -147,6 +164,10 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (ThemePrefs.getMode(this) != appliedThemeMode) {
+            recreate()
+            return
+        }
         // Re-apply only when the defaults were edited in Settings,
         // so per-app tweaks on this form survive other round trips.
         if (::permMic.isInitialized &&
@@ -461,7 +482,7 @@ class MainActivity : Activity() {
 
     private fun checkGeneratorUpdate(manual: Boolean) {
         if (manual) statusText.text = "更新を確認しています…"
-        UpdateChecker.fetchLatest(configuredRepo()) { tag, pageUrl, error ->
+        UpdateChecker.fetchLatest(configuredRepo()) { tag, pageUrl, assetUrl, error ->
             runOnUiThread {
                 when {
                     error != null -> {
@@ -475,7 +496,7 @@ class MainActivity : Activity() {
                     UpdateChecker.compareVersions(
                         tag!!, GeneratorEngine.APP_VERSION_NAME
                     ) > 0 -> {
-                        showGeneratorUpdateDialog(tag!!, pageUrl!!)
+                        UpdateFlow.prompt(this, tag!!, pageUrl!!, assetUrl)
                     }
                     else -> {
                         if (manual) {
@@ -486,25 +507,6 @@ class MainActivity : Activity() {
                 }
             }
         }
-    }
-
-    private fun showGeneratorUpdateDialog(tag: String, pageUrl: String) {
-        if (isFinishing) return
-        AlertDialog.Builder(this)
-            .setTitle("新しいバージョンがあります")
-            .setMessage(
-                "アプリカ $tag が GitHub Releases で公開されています。" +
-                    "新しいAPKも同じ署名キーで署名されているため、そのまま上書きインストールできます。"
-            )
-            .setPositiveButton("リリースページを開く") { _, _ ->
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(pageUrl)))
-                } catch (e: Exception) {
-                    toast("ブラウザを開けませんでした")
-                }
-            }
-            .setNegativeButton("あとで", null)
-            .show()
     }
 
     // ------------------------------------------------------------------
@@ -540,7 +542,7 @@ class MainActivity : Activity() {
         if (history.isEmpty()) {
             val tv = TextView(this).apply {
                 text = "まだ生成したAPKはありません"
-                setTextColor(0xFF57726F.toInt())
+                setTextColor(cSub())
             }
             historyList.addView(tv)
             return
@@ -562,14 +564,14 @@ class MainActivity : Activity() {
             }
             container.addView(TextView(this).apply {
                 text = name
-                setTextColor(0xFF173A3A.toInt())
+                setTextColor(cInk())
                 textSize = 16f
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             })
             val entryTemplate = entry.optInt("templateVersion", 0)
             val updateAvailable = entryTemplate < GeneratorEngine.TEMPLATE_VERSION
             container.addView(TextView(this).apply {
-                setTextColor(0xFF57726F.toInt())
+                setTextColor(cSub())
                 text = "${entry.optString("url")}\n" +
                     "${entry.optString("pkg")} · ${fmt.format(Date(entry.optLong("created")))}" +
                     "\nテンプレート v$entryTemplate" +
@@ -580,7 +582,7 @@ class MainActivity : Activity() {
             if (updateAvailable) {
                 container.addView(TextView(this).apply {
                     text = "★ 更新あり（新しいテンプレートで作り直せます）"
-                    setTextColor(0xFF0A6E6D.toInt())
+                    setTextColor(cAccentText())
                     textSize = 13f
                     setTypeface(typeface, android.graphics.Typeface.BOLD)
                 })
@@ -589,7 +591,7 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.START
             }
-            row.addView(smallButton("インストール") { installApk(file) })
+            row.addView(smallButton("インストール") { installApk(file, entry.optString("pkg")) })
             if (updateAvailable) {
                 row.addView(smallButton("再生成") { regenerate(entry) })
             }
@@ -610,7 +612,7 @@ class MainActivity : Activity() {
         return Button(this).apply {
             text = label
             setBackgroundResource(R.drawable.bg_button_secondary)
-            setTextColor(0xFF0A6E6D.toInt())
+            setTextColor(cAccentText())
             layoutParams = LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
             ).apply {
@@ -628,7 +630,7 @@ class MainActivity : Activity() {
      * scope. The guidance is shown only here, i.e. only when installing
      * a generated app from within アプリカ.
      */
-    private fun installApk(file: File) {
+    private fun installApk(file: File, pkg: String) {
         if (!file.exists()) {
             toast("ファイルが見つかりません")
             return
@@ -641,31 +643,9 @@ class MainActivity : Activity() {
                     "「そのままインストール」を選んでください。" +
                     "（ストア外のアプリへの標準の確認で、アプリ側では消せません）"
             )
-            .setPositiveButton("インストールに進む") { _, _ -> doInstallApk(file) }
+            .setPositiveButton("インストールに進む") { _, _ -> Installer.install(this, file, pkg) }
             .setNegativeButton("キャンセル", null)
             .show()
-    }
-
-    private fun doInstallApk(file: File) {
-        val uri = GenFileProvider.uriFor(file)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        try {
-            startActivity(intent)
-        } catch (e: Exception) {
-            toast("インストーラを起動できませんでした。このアプリからのインストール許可を確認してください")
-            try {
-                startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:$packageName")
-                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            } catch (ignored: Exception) {
-            }
-        }
     }
 
     private fun shareApk(file: File) {

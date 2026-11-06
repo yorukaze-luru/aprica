@@ -30,7 +30,7 @@ object UpdateChecker {
      */
     fun fetchLatest(
         repo: String,
-        callback: (tag: String?, pageUrl: String?, error: String?) -> Unit
+        callback: (tag: String?, pageUrl: String?, assetUrl: String?, error: String?) -> Unit
     ) {
         thread {
             try {
@@ -44,13 +44,54 @@ object UpdateChecker {
                 val pageUrl = json.optString(
                     "html_url", "https://github.com/$repo/releases"
                 )
+                var assetUrl: String? = null
+                val assets = json.optJSONArray("assets")
+                if (assets != null) {
+                    for (i in 0 until assets.length()) {
+                        val a = assets.optJSONObject(i) ?: continue
+                        if (a.optString("name").endsWith(".apk")) {
+                            assetUrl = a.optString("browser_download_url")
+                            break
+                        }
+                    }
+                }
                 if (tag.isEmpty()) {
-                    callback(null, null, "リリースが見つかりませんでした")
+                    callback(null, null, null, "リリースが見つかりませんでした")
                 } else {
-                    callback(tag, pageUrl, null)
+                    callback(tag, pageUrl, assetUrl, null)
                 }
             } catch (e: Exception) {
-                callback(null, null, e.message ?: e.javaClass.simpleName)
+                callback(null, null, null, e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
+    /**
+     * Downloads an APK (e.g. a newer アプリカ release) into the app's
+     * cache on a background thread, for the in-app update flow (v1.5).
+     * Callback: (downloaded file, error message); runs on the
+     * background thread.
+     */
+    fun downloadApk(
+        ctx: android.content.Context,
+        url: String,
+        callback: (file: java.io.File?, error: String?) -> Unit
+    ) {
+        thread {
+            try {
+                val dir = java.io.File(ctx.cacheDir, "update").apply { mkdirs() }
+                val out = java.io.File(dir, "aprica-update.apk")
+                val conn = URL(url).openConnection() as HttpURLConnection
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 30_000
+                conn.instanceFollowRedirects = true
+                conn.inputStream.use { input ->
+                    out.outputStream().use { input.copyTo(it) }
+                }
+                if (out.length() == 0L) throw java.io.IOException("empty download")
+                callback(out, null)
+            } catch (e: Exception) {
+                callback(null, e.message ?: e.javaClass.simpleName)
             }
         }
     }

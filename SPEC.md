@@ -101,3 +101,14 @@
 - テンプレート v4（templateVersion 4）: 読み込みプログレスバーをブランド色に、初回読み込み中はアプリのアイコンと名前のスプラッシュを表示、メインフレームの通信／SSLエラー時は生のエラー画面ではなく再読み込みボタン付きの案内画面を表示。プルリフレッシュは従来通り。
 - 既存の生成アプリは履歴に「更新あり」が出るので、再生成すると新デザインになる。
 - versionCode 5 / versionName 1.4（テンプレートは versionCode 4 / versionName 1.4）。
+
+
+## 15. v1.5 addendum (2026-11-06)
+
+### Dark mode
+- アプリカ本体: 設定ページに「表示」カード（端末に合わせる／ライト／ダーク）。実装は attachBaseContext の uiMode 上書き＋values-night／drawable-night リソース。テーマへの文字色上書きは v1.4.1 の教訓により行わない。コード生成の文字色は ThemePrefs.isNight で切替。
+- テンプレート v5（templateVersion 5、versionCode 5 / versionName 1.5）: Android 13+ で WebView の setAlgorithmicDarkeningAllowed(true)。スプラッシュ／エラー画面は端末の夜間モードで暗色に切替。
+
+### Installs and self-update
+- インストールを PackageInstaller セッション方式に変更（Installer / InstallResultReceiver）。アプリカが installer of record になる。Android 12+ では、インストール済みパッケージの更新に USER_ACTION_NOT_REQUIRED を要求（プラットフォーム条件を満たせば確認なし、満たさなければ通常の確認にフォールバック）。権限 UPDATE_PACKAGES_WITHOUT_USER_ACTION を宣言。
+- アプリカ本体の更新: リリースの APK アセットをアプリ内ダウンロード（UpdateChecker.downloadApk）→ Installer でインストール。UpdateFlow が両画面共通のダイアログを担当。

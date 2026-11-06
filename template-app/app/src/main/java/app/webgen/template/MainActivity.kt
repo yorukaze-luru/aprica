@@ -125,6 +125,17 @@ class MainActivity : Activity() {
         root.addView(splashOverlay, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
 
+        // Dark mode (template v5): on Android 13+, let the WebView
+        // algorithmically darken pages when the device is in dark
+        // mode. Sites with their own prefers-color-scheme support
+        // follow the device setting through the WebView itself.
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            try {
+                webView.settings.setAlgorithmicDarkeningAllowed(true)
+            } catch (e: Exception) {
+                // older WebView providers may not support it
+            }
+        }
         applyWebSettings(webView)
         webView.webViewClient = createWebViewClient()
         webView.webChromeClient = chromeClient
@@ -243,12 +254,26 @@ class MainActivity : Activity() {
     }
 
     /** Full-screen splash shown until the first page finishes loading. */
+    private fun isNightMode(): Boolean =
+        (resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+    private fun brandBg(): Int =
+        if (isNightMode()) 0xFF0C1B1A.toInt() else BRAND_BG
+
+    private fun inkColor(): Int =
+        if (isNightMode()) 0xFFE8F4F1.toInt() else INK
+
+    private fun inkSubColor(): Int =
+        if (isNightMode()) 0xFF9DB8B3.toInt() else INK_SUB
+
     private fun buildSplashOverlay(): LinearLayout {
         val density = resources.displayMetrics.density
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(BRAND_BG)
+            setBackgroundColor(brandBg())
             val icon = ImageView(this@MainActivity).apply {
                 setImageDrawable(appIconDrawable())
                 val size = (96 * density).toInt()
@@ -258,7 +283,7 @@ class MainActivity : Activity() {
             addView(TextView(this@MainActivity).apply {
                 text = siteConfig.optString("name", "")
                 textSize = 20f
-                setTextColor(INK)
+                setTextColor(inkColor())
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
                 gravity = Gravity.CENTER
                 setPadding(0, (14 * density).toInt(), 0, 0)
@@ -280,7 +305,7 @@ class MainActivity : Activity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(BRAND_BG)
+            setBackgroundColor(brandBg())
             visibility = View.GONE
             setPadding(
                 (32 * density).toInt(), 0, (32 * density).toInt(), 0
@@ -294,7 +319,7 @@ class MainActivity : Activity() {
             addView(TextView(this@MainActivity).apply {
                 text = "ページを読み込めませんでした"
                 textSize = 17f
-                setTextColor(INK)
+                setTextColor(inkColor())
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
                 gravity = Gravity.CENTER
                 setPadding(0, (16 * density).toInt(), 0, 0)
@@ -302,7 +327,7 @@ class MainActivity : Activity() {
             addView(TextView(this@MainActivity).apply {
                 text = "通信環境を確認して、もう一度お試しください。"
                 textSize = 13f
-                setTextColor(INK_SUB)
+                setTextColor(inkSubColor())
                 gravity = Gravity.CENTER
                 setPadding(0, (8 * density).toInt(), 0, 0)
             })
