@@ -62,4 +62,6 @@
 
 ## ライセンス
 
-未定 (TBD)
+Apache License 2.0（[LICENSE](LICENSE) を参照）
+
+Copyright 2026 yorukaze-luru
