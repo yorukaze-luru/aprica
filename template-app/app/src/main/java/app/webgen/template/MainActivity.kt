@@ -7,25 +7,35 @@ import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ContentValues
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.net.http.SslError
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Message
 import android.provider.MediaStore
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
+import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.TextView
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -36,7 +46,7 @@ import kotlin.concurrent.thread
  *
  * On startup it reads assets/site_config.json:
  *   {"url": "https://...", "name": "...",
- *    "templateVersion": 3,                    // template version baked in
+ *    "templateVersion": 4,                    // template version baked in
  *    "notifications": true,                   // ask POST_NOTIFICATIONS once
  *    "permissions": {"microphone": true, "camera": false,
  *                    "location": false, "notifications": true},
@@ -65,6 +75,10 @@ import kotlin.concurrent.thread
  * - If the config carries updateFeedUrl, the app fetches it once at
  *   startup; when the feed's templateVersion is newer than the baked-in
  *   one it tells the user to regenerate the app with アプリカ.
+ * UX (v4): teal top progress bar, a splash overlay (app icon + name)
+ * while the first page loads, pull-to-refresh, and a friendly error
+ * overlay with a retry button for main-frame network / SSL errors.
+ *
  * Note: some providers (notably Google OAuth) block embedded WebView
  * sign-in by policy; no in-app rule can fix that. See SPEC.md section 5.
  */
@@ -72,6 +86,10 @@ class MainActivity : Activity() {
 
     private lateinit var webView: WebView
     private lateinit var progress: ProgressBar
+    private lateinit var splashOverlay: LinearLayout
+    private lateinit var errorOverlay: LinearLayout
+    private var pageError = false
+    private var startUrl: String = ""
     private var popupWebView: WebView? = null
     private var popupDialog: Dialog? = null
 
@@ -91,15 +109,20 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         siteConfig = readSiteConfig()
-        val startUrl = siteConfig.optString("url", "https://example.com")
+        startUrl = siteConfig.optString("url", "https://example.com")
         title = siteConfig.optString("name", "")
 
         val root = FrameLayout(this)
         webView = WebView(this)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
         progress.max = 100
+        progress.progressTintList = ColorStateList.valueOf(BRAND_TEAL)
         root.addView(webView, FrameLayout.LayoutParams(-1, -1))
         root.addView(progress, FrameLayout.LayoutParams(-1, 6))
+        errorOverlay = buildErrorOverlay()
+        root.addView(errorOverlay, FrameLayout.LayoutParams(-1, -1))
+        splashOverlay = buildSplashOverlay()
+        root.addView(splashOverlay, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
 
         applyWebSettings(webView)
@@ -163,11 +186,144 @@ class MainActivity : Activity() {
                 request: WebResourceRequest
             ): Boolean = handleNavigation(view, request.url)
 
+            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                if (view === webView) {
+                    pageError = false
+                    errorOverlay.visibility = View.GONE
+                }
+            }
+
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
                 // Persist session cookies (login state) promptly.
                 CookieManager.getInstance().flush()
+                if (view === webView) {
+                    splashOverlay.visibility = View.GONE
+                    if (!pageError) errorOverlay.visibility = View.GONE
+                }
             }
+
+            override fun onReceivedError(
+                view: WebView,
+                request: WebResourceRequest,
+                error: WebResourceError
+            ) {
+                super.onReceivedError(view, request, error)
+                if (view === webView && request.isForMainFrame) {
+                    showError()
+                }
+            }
+
+            override fun onReceivedSslError(
+                view: WebView,
+                handler: SslErrorHandler,
+                error: SslError
+            ) {
+                // Never proceed on a certificate error; show the retry
+                // screen instead of a raw browser error page.
+                handler.cancel()
+                if (view === webView) showError()
+            }
+        }
+    }
+
+    private fun showError() {
+        pageError = true
+        splashOverlay.visibility = View.GONE
+        errorOverlay.visibility = View.VISIBLE
+    }
+
+    private fun appIconDrawable(): android.graphics.drawable.Drawable? {
+        return try {
+            packageManager.getApplicationIcon(packageName)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Full-screen splash shown until the first page finishes loading. */
+    private fun buildSplashOverlay(): LinearLayout {
+        val density = resources.displayMetrics.density
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(BRAND_BG)
+            val icon = ImageView(this@MainActivity).apply {
+                setImageDrawable(appIconDrawable())
+                val size = (96 * density).toInt()
+                layoutParams = LinearLayout.LayoutParams(size, size)
+            }
+            addView(icon)
+            addView(TextView(this@MainActivity).apply {
+                text = siteConfig.optString("name", "")
+                textSize = 20f
+                setTextColor(INK)
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                gravity = Gravity.CENTER
+                setPadding(0, (14 * density).toInt(), 0, 0)
+            })
+            addView(ProgressBar(this@MainActivity).apply {
+                isIndeterminate = true
+                indeterminateTintList = ColorStateList.valueOf(BRAND_TEAL)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = (18 * density).toInt() }
+            })
+        }
+    }
+
+    /** Friendly error screen with retry, for main-frame load failures. */
+    private fun buildErrorOverlay(): LinearLayout {
+        val density = resources.displayMetrics.density
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(BRAND_BG)
+            visibility = View.GONE
+            setPadding(
+                (32 * density).toInt(), 0, (32 * density).toInt(), 0
+            )
+            val icon = ImageView(this@MainActivity).apply {
+                setImageDrawable(appIconDrawable())
+                val size = (72 * density).toInt()
+                layoutParams = LinearLayout.LayoutParams(size, size)
+            }
+            addView(icon)
+            addView(TextView(this@MainActivity).apply {
+                text = "ページを読み込めませんでした"
+                textSize = 17f
+                setTextColor(INK)
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                gravity = Gravity.CENTER
+                setPadding(0, (16 * density).toInt(), 0, 0)
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "通信環境を確認して、もう一度お試しください。"
+                textSize = 13f
+                setTextColor(INK_SUB)
+                gravity = Gravity.CENTER
+                setPadding(0, (8 * density).toInt(), 0, 0)
+            })
+            addView(Button(this@MainActivity).apply {
+                text = "再読み込み"
+                setTextColor(Color.WHITE)
+                backgroundTintList = ColorStateList.valueOf(BRAND_TEAL)
+                setOnClickListener {
+                    errorOverlay.visibility = View.GONE
+                    pageError = false
+                    if (webView.url.isNullOrEmpty()) {
+                        webView.loadUrl(startUrl)
+                    } else {
+                        webView.reload()
+                    }
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = (20 * density).toInt() }
+            })
         }
     }
 
@@ -639,6 +795,12 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        // UI accents shared with the generator's brand palette.
+        private const val BRAND_TEAL = 0xFF0E9594.toInt()
+        private const val BRAND_BG = 0xFFF2F8F7.toInt()
+        private const val INK = 0xFF173A3A.toInt()
+        private const val INK_SUB = 0xFF57726F.toInt()
+
         /** Schemes rendered/handled by the WebView itself, never sent out. */
         private val INTERNAL_SCHEMES = setOf(
             "about", "data", "blob", "file", "content", "javascript", "view-source"

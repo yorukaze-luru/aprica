@@ -9,168 +9,270 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <!-- Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:background="@drawable/bg_header"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
 
-            <TextView
+            <ImageView
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:contentDescription="アプリカ"
+                android:src="@mipmap/ic_launcher" />
+
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
                 android:layout_weight="1"
-                android:text="アプリカ"
-                android:textSize="22sp"
-                android:textStyle="bold" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="アプリカ"
+                    android:textColor="@color/white"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ウェブサイトを本物のアプリに"
+                    android:textColor="@color/white"
+                    android:textSize="12sp" />
+            </LinearLayout>
 
             <Button
                 android:id="@+id/settingsButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="☰ 設定" />
+                android:background="@drawable/bg_button_secondary"
+                android:minWidth="0dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:text="☰ 設定"
+                android:textColor="@color/brand_teal_dark" />
         </LinearLayout>
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="ウェブサイトのURLを入れると、独立したアプリ（APK）をこの端末の中で生成します。"
-            android:textSize="13sp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="サイトURL" />
-
-        <EditText
-            android:id="@+id/urlInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="https://example.com"
-            android:inputType="textUri"
-            android:singleLine="true" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="アプリ名" />
-
-        <EditText
-            android:id="@+id/nameInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="例：Exampleサイト"
-            android:inputType="text"
-            android:singleLine="true" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="パッケージ名（自動提案・編集可）" />
-
-        <EditText
-            android:id="@+id/pkgInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="app.webgen.example"
-            android:inputType="text"
-            android:singleLine="true" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="権限（必要なサイトだけONにしてください）"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="OFFの権限は生成アプリに含まれません。サイトがマイク等を使うときに実行時許可を求めます。"
-            android:textSize="12sp" />
-
-        <Switch
-            android:id="@+id/permMic"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="マイク（音声入力・通話など）" />
-
-        <Switch
-            android:id="@+id/permCamera"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="カメラ（撮影・ビデオ通話など）" />
-
-        <Switch
-            android:id="@+id/permLocation"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="位置情報" />
-
-        <Switch
-            android:id="@+id/permNotifications"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="通知（アプリ側の通知のみ。Webプッシュ通知は非対応）" />
-
+        <!-- Card: site -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:orientation="horizontal">
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp">
 
-            <Button
-                android:id="@+id/faviconButton"
-                android:layout_width="0dp"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="サイトのアイコンを取得" />
+                android:text="サイト"
+                android:textColor="@color/ink"
+                android:textSize="16sp"
+                android:textStyle="bold" />
 
-            <Button
-                android:id="@+id/pickButton"
-                android:layout_width="0dp"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="画像を選ぶ" />
+                android:layout_marginTop="10dp"
+                android:text="サイトURL"
+                android:textColor="@color/ink_sub"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/urlInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_input"
+                android:hint="https://example.com"
+                android:inputType="textUri"
+                android:padding="12dp"
+                android:singleLine="true" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="アプリ名"
+                android:textColor="@color/ink_sub"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/nameInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_input"
+                android:hint="例：Exampleサイト"
+                android:inputType="text"
+                android:padding="12dp"
+                android:singleLine="true" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="パッケージ名（自動提案・編集可）"
+                android:textColor="@color/ink_sub"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/pkgInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_input"
+                android:hint="app.webgen.example"
+                android:inputType="text"
+                android:padding="12dp"
+                android:singleLine="true" />
         </LinearLayout>
 
-        <ImageView
-            android:id="@+id/iconPreview"
-            android:layout_width="96dp"
-            android:layout_height="96dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="8dp"
-            android:contentDescription="アイコンプレビュー" />
-
-        <TextView
-            android:id="@+id/iconStatus"
-            android:layout_width="wrap_content"
+        <!-- Card: permissions -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:text="アイコン未選択（生成時にアプリ名の頭文字アイコンを自動生成します）"
-            android:textSize="12sp" />
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="権限"
+                android:textColor="@color/ink"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="必要なサイトだけONにしてください。OFFの権限は生成アプリに含まれません。初期値は設定ページで変更できます。"
+                android:textColor="@color/ink_sub"
+                android:textSize="12sp" />
+
+            <Switch
+                android:id="@+id/permMic"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="マイク（音声入力・通話など）" />
+
+            <Switch
+                android:id="@+id/permCamera"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="カメラ（撮影・ビデオ通話など）" />
+
+            <Switch
+                android:id="@+id/permLocation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="位置情報" />
+
+            <Switch
+                android:id="@+id/permNotifications"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="通知（アプリ側の通知のみ。Webプッシュ通知は非対応）" />
+        </LinearLayout>
+
+        <!-- Card: icon -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="アイコン"
+                android:textColor="@color/ink"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/faviconButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_button_secondary"
+                    android:text="サイトのアイコンを取得"
+                    android:textColor="@color/brand_teal_dark" />
+
+                <Button
+                    android:id="@+id/pickButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_button_secondary"
+                    android:text="画像を選ぶ"
+                    android:textColor="@color/brand_teal_dark" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/iconPreview"
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:contentDescription="アイコンプレビュー" />
+
+            <TextView
+                android:id="@+id/iconStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="6dp"
+                android:text="アイコン未選択（生成時にアプリ名の頭文字アイコンを自動生成します）"
+                android:textColor="@color/ink_sub"
+                android:textSize="12sp" />
+        </LinearLayout>
 
         <Button
             android:id="@+id/generateButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="APKを生成" />
+            android:layout_height="56dp"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_button_primary"
+            android:text="APKを生成"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="10dp"
+            android:textColor="@color/ink"
             android:textSize="13sp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="22dp"
             android:text="生成履歴"
+            android:textColor="@color/ink"
             android:textSize="17sp"
             android:textStyle="bold" />
 
@@ -178,6 +280,7 @@
             android:id="@+id/historyList"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:orientation="vertical" />
     </LinearLayout>
 </ScrollView>

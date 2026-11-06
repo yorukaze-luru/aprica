@@ -546,9 +546,16 @@ class MainActivity : Activity() {
         for (entry in history) {
             val name = entry.optString("name")
             val file = File(entry.optString("path"))
+            val density = resources.displayMetrics.density
             val container = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(0, 20, 0, 8)
+                setBackgroundResource(R.drawable.bg_card)
+                val pad = (14 * density).toInt()
+                setPadding(pad, pad, pad, pad)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = (10 * density).toInt() }
             }
             container.addView(TextView(this).apply {
                 text = name
@@ -568,6 +575,7 @@ class MainActivity : Activity() {
             if (updateAvailable) {
                 container.addView(TextView(this).apply {
                     text = "★ 更新あり（新しいテンプレートで作り直せます）"
+                    setTextColor(0xFF0A6E6D.toInt())
                     textSize = 13f
                     setTypeface(typeface, android.graphics.Typeface.BOLD)
                 })
@@ -596,6 +604,8 @@ class MainActivity : Activity() {
     private fun smallButton(label: String, onClick: () -> Unit): Button {
         return Button(this).apply {
             text = label
+            setBackgroundResource(R.drawable.bg_button_secondary)
+            setTextColor(0xFF0A6E6D.toInt())
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
