@@ -14,7 +14,7 @@ import java.util.Map;
  *
  * args: <template.apk> <icon.png> <keyDir> <outOn.apk> <outOff.apk>
  * Fixed sample: URL https://ja.wikipedia.org, name "Wikiサンプル",
- * package app.webgen.sample.wiki, templateVersion 5.
+ * package app.webgen.sample.wiki, templateVersion 6.
  *   outOn:  every capability toggle ON  (manifest keeps real permissions)
  *   outOff: every capability toggle OFF (permission names neutralized)
  */
@@ -42,7 +42,7 @@ public class TestMain {
         on.camera = true;
         on.location = true;
         on.notifications = true;
-        on.templateVersion = 5;
+        on.templateVersion = 6;
         ApkBuilder.Result rOn = ApkBuilder.buildAndSign(
                 template, outOn,
                 "https://ja.wikipedia.org", "Wikiサンプル", "app.webgen.sample.wiki",
@@ -57,7 +57,7 @@ public class TestMain {
         off.camera = false;
         off.location = false;
         off.notifications = false;
-        off.templateVersion = 5;
+        off.templateVersion = 6;
         ApkBuilder.Result rOff = ApkBuilder.buildAndSign(
                 template, outOff,
                 "https://ja.wikipedia.org", "Wikiサンプル", "app.webgen.sample.wiki",

@@ -125,6 +125,24 @@ class MainActivity : Activity() {
         root.addView(splashOverlay, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
 
+        // Keep page content (e.g. a chat input pinned to the bottom of
+        // the page) out from behind the system bars (template v6):
+        // color the bars and pad the root view by the system-bar
+        // insets, so the WebView area always ends above the
+        // navigation bar regardless of the device's bar style.
+        window.statusBarColor = BRAND_TEAL_DARK
+        window.navigationBarColor = BRAND_TEAL_DARK
+        root.setOnApplyWindowInsetsListener { v, insets ->
+            v.setPadding(
+                insets.systemWindowInsetLeft,
+                insets.systemWindowInsetTop,
+                insets.systemWindowInsetRight,
+                insets.systemWindowInsetBottom
+            )
+            insets
+        }
+        root.requestApplyInsets()
+
         // Dark mode (template v5): on Android 13+, let the WebView
         // algorithmically darken pages when the device is in dark
         // mode. Sites with their own prefers-color-scheme support
@@ -140,18 +158,43 @@ class MainActivity : Activity() {
         webView.webViewClient = createWebViewClient()
         webView.webChromeClient = chromeClient
 
-        // Simple pull-to-refresh: drag down while at the very top.
+        // Pull-to-refresh (v6): fire only when nothing under the
+        // finger can scroll up. Chat-like pages scroll an inner
+        // container while the WebView itself stays at scrollY 0, so
+        // the old check reloaded whenever the user dragged down to
+        // reveal older content. Probe the page at touch-down: if any
+        // ancestor of the touched element has scrollTop > 0, this
+        // gesture belongs to that scroller, not to pull-to-refresh.
         webView.setOnTouchListener { v, ev ->
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     touchDownY = ev.y
-                    pullReloadArmed = true
+                    pullReloadArmed = false
+                    if (v.scrollY == 0) {
+                        val density = resources.displayMetrics.density
+                        val cx = (ev.x / density).toInt()
+                        val cy = (ev.y / density).toInt()
+                        webView.evaluateJavascript(
+                            "(function(x,y){var el=document.elementFromPoint(x,y);" +
+                                "while(el){if(el.scrollTop>0)return 'block';el=el.parentElement;}" +
+                                "var d=document.scrollingElement||document.documentElement;" +
+                                "if(d&&d.scrollTop>0)return 'block';return 'ok';})($cx,$cy)"
+                        ) { result ->
+                            if (result != null && result.contains("ok") && v.scrollY == 0) {
+                                pullReloadArmed = true
+                            }
+                        }
+                    }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (pullReloadArmed && v.scrollY == 0 && ev.y - touchDownY > 220f) {
+                    val threshold = 160f * resources.displayMetrics.density
+                    if (pullReloadArmed && v.scrollY == 0 && ev.y - touchDownY > threshold) {
                         pullReloadArmed = false
                         webView.reload()
                     }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    pullReloadArmed = false
                 }
             }
             false
@@ -822,6 +865,7 @@ class MainActivity : Activity() {
     companion object {
         // UI accents shared with the generator's brand palette.
         private const val BRAND_TEAL = 0xFF0E9594.toInt()
+        private const val BRAND_TEAL_DARK = 0xFF0A6E6D.toInt()
         private const val BRAND_BG = 0xFFF2F8F7.toInt()
         private const val INK = 0xFF173A3A.toInt()
         private const val INK_SUB = 0xFF57726F.toInt()

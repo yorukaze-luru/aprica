@@ -112,3 +112,20 @@
 ### Installs and self-update
 - インストールを PackageInstaller セッション方式に変更（Installer / InstallResultReceiver）。アプリカが installer of record になる。Android 12+ では、インストール済みパッケージの更新に USER_ACTION_NOT_REQUIRED を要求（プラットフォーム条件を満たせば確認なし、満たさなければ通常の確認にフォールバック）。権限 UPDATE_PACKAGES_WITHOUT_USER_ACTION を宣言。
 - アプリカ本体の更新: リリースの APK アセットをアプリ内ダウンロード（UpdateChecker.downloadApk）→ Installer でインストール。UpdateFlow が両画面共通のダイアログを担当。
+
+
+## 16. v1.6 addendum (2026-11-06) — template v6
+
+ユーザー実機報告への対応（テンプレートのみ変更、templateVersion 6、テンプレート versionCode 6 / versionName 1.6、アプリカ本体は versionCode 8 / versionName 1.6 で機能変更なし）:
+- 下部固定入力欄がナビゲーションバーに被る: ルートビューに systemWindowInset のパディングを適用し、ステータスバー／ナビゲーションバーにブランド色（濃ティール）を設定。テンプレートの Activity に windowSoftInputMode=adjustResize を追加（キーボード表示時にページが縮み、下部入力欄がキーボード上に残る）。
+- 引っ張って更新の誤作動: 旧実装は WebView の scrollY==0 のみで判定していたため、内部スクロール領域を持つチャット系ページで「上にスクロールしようと下に引っ張る」操作でもリロードしていた。v6 ではタッチ開始時に elementFromPoint の祖先チェーンと scrollingElement の scrollTop を JS で調べ、上にスクロール可能な領域がある間は PTR を武装しない。閾値は 160dp。
+
+
+## 17. バージョン管理ルール (2026-11-06, ユーザー指示)
+
+- 形式: MAJOR.MINOR.PATCH（セマンティックバージョニング）。
+  - MAJOR: アプリが大きく変わるとき
+  - MINOR: 機能の追加・削除があるとき
+  - PATCH: バグ修正・機能の修正のとき
+- 修正・変更を加えたら、確認を待たず GitHub へ自動で公開する（ソース更新＋Releases）。
+- このルールにより、テンプレート v6 の修正版は当初予定の「v1.6」ではなく v1.5.1 として公開した（versionCode は 8 のまま単調増加を維持）。テンプレートの内部バージョン（templateVersion）は従来通り変更ごとに +1 する連番。

@@ -19,10 +19,10 @@ object GeneratorEngine {
      * app's site_config.json and into the history, where it drives the
      * "update available" marker and the regenerate flow.
      */
-    const val TEMPLATE_VERSION = 5
+    const val TEMPLATE_VERSION = 6
 
     /** Generator app versionName (kept in sync with build_generator.sh). */
-    const val APP_VERSION_NAME = "1.5"
+    const val APP_VERSION_NAME = "1.5.1"
 
     private val DENSITIES = listOf(
         "mdpi" to 48, "hdpi" to 72, "xhdpi" to 96, "xxhdpi" to 144, "xxxhdpi" to 192

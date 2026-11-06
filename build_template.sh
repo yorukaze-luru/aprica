@@ -35,7 +35,7 @@ echo "== 2. aapt2 link (manifest + resources + assets) =="
   --manifest "$APP/src/main/AndroidManifest.xml" \
   -A "$APP/src/main/assets" \
   --min-sdk-version 26 --target-sdk-version 34 \
-  --version-code 5 --version-name 1.5 \
+  --version-code 6 --version-name 1.6 \
   "$WORK/compiled/res.zip"
 
 echo "== 3. kotlinc (no daemon) =="
