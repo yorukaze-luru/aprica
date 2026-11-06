@@ -5,8 +5,5 @@
         <item name="android:windowBackground">@color/brand_bg</item>
         <item name="android:statusBarColor">@color/brand_teal_dark</item>
         <item name="android:navigationBarColor">@color/white</item>
-        <item name="android:textColorPrimary">@color/ink</item>
-        <item name="android:textColorSecondary">@color/ink_sub</item>
-        <item name="android:fontFamily">sans</item>
     </style>
 </resources>

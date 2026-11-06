@@ -538,7 +538,10 @@ class MainActivity : Activity() {
     private fun refreshHistory() {
         historyList.removeAllViews()
         if (history.isEmpty()) {
-            val tv = TextView(this).apply { text = "まだ生成したAPKはありません" }
+            val tv = TextView(this).apply {
+                text = "まだ生成したAPKはありません"
+                setTextColor(0xFF57726F.toInt())
+            }
             historyList.addView(tv)
             return
         }
@@ -559,12 +562,14 @@ class MainActivity : Activity() {
             }
             container.addView(TextView(this).apply {
                 text = name
+                setTextColor(0xFF173A3A.toInt())
                 textSize = 16f
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             })
             val entryTemplate = entry.optInt("templateVersion", 0)
             val updateAvailable = entryTemplate < GeneratorEngine.TEMPLATE_VERSION
             container.addView(TextView(this).apply {
+                setTextColor(0xFF57726F.toInt())
                 text = "${entry.optString("url")}\n" +
                     "${entry.optString("pkg")} · ${fmt.format(Date(entry.optLong("created")))}" +
                     "\nテンプレート v$entryTemplate" +
@@ -607,8 +612,11 @@ class MainActivity : Activity() {
             setBackgroundResource(R.drawable.bg_button_secondary)
             setTextColor(0xFF0A6E6D.toInt())
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+            ).apply {
+                val m = (3 * resources.displayMetrics.density).toInt()
+                marginStart = m; marginEnd = m
+            }
             setOnClickListener { onClick() }
         }
     }

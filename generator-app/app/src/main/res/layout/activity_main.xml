@@ -164,25 +164,29 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="マイク（音声入力・通話など）" />
+                android:text="マイク（音声入力・通話など）" 
+                android:textColor="@color/ink"/>
 
             <Switch
                 android:id="@+id/permCamera"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="カメラ（撮影・ビデオ通話など）" />
+                android:text="カメラ（撮影・ビデオ通話など）" 
+                android:textColor="@color/ink"/>
 
             <Switch
                 android:id="@+id/permLocation"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="位置情報" />
+                android:text="位置情報" 
+                android:textColor="@color/ink"/>
 
             <Switch
                 android:id="@+id/permNotifications"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="通知（アプリ側の通知のみ。Webプッシュ通知は非対応）" />
+                android:text="通知（アプリ側の通知のみ。Webプッシュ通知は非対応）" 
+                android:textColor="@color/ink"/>
         </LinearLayout>
 
         <!-- Card: icon -->
@@ -231,6 +235,7 @@
 
             <ImageView
                 android:id="@+id/iconPreview"
+                android:background="@drawable/bg_input"
                 android:layout_width="96dp"
                 android:layout_height="96dp"
                 android:layout_gravity="center_horizontal"
