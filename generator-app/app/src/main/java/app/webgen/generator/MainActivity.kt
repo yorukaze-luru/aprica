@@ -43,7 +43,6 @@ class MainActivity : Activity() {
     private lateinit var permCamera: Switch
     private lateinit var permLocation: Switch
     private lateinit var permNotifications: Switch
-    private lateinit var repoInput: EditText
     private lateinit var iconPreview: ImageView
     private lateinit var iconStatus: TextView
     private lateinit var statusText: TextView
@@ -67,7 +66,6 @@ class MainActivity : Activity() {
         permCamera = findViewById(R.id.permCamera)
         permLocation = findViewById(R.id.permLocation)
         permNotifications = findViewById(R.id.permNotifications)
-        repoInput = findViewById(R.id.repoInput)
         iconPreview = findViewById(R.id.iconPreview)
         iconStatus = findViewById(R.id.iconStatus)
         statusText = findViewById(R.id.statusText)
@@ -100,38 +98,62 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.pickButton).setOnClickListener { pickImage() }
         generateButton.setOnClickListener { generate() }
 
-        // Settings: GitHub repo used for the update check (persisted).
-        repoInput.setText(prefs().getString(KEY_REPO, ""))
-        repoInput.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) {
-                prefs().edit().putString(KEY_REPO, s?.toString()?.trim() ?: "").apply()
-            }
-            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-        })
-        findViewById<Button>(R.id.checkUpdateButton).setOnClickListener {
-            checkGeneratorUpdate(manual = true)
+        // Settings live on their own page (hamburger button).
+        findViewById<Button>(R.id.settingsButton).setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
+        // Permission toggles start from the defaults chosen in Settings.
+        applyPermissionDefaults()
 
         loadHistory()
         refreshHistory()
 
-        // Silent update check at startup (only when a repo is configured).
-        if (configuredRepo() != null) {
-            checkGeneratorUpdate(manual = false)
-        }
+        // Silent update check at startup (repo is baked in since v1.3).
+        checkGeneratorUpdate(manual = false)
     }
 
     private fun prefs() = getSharedPreferences("settings", MODE_PRIVATE)
 
-    /** "owner/name" from the settings field, or null when unset/invalid. */
-    private fun configuredRepo(): String? {
-        val repo = repoInput.text.toString().trim()
-        return if (REPO_RE.matches(repo)) repo else null
+    /**
+     * "owner/name" used for update checks and as the update feed written
+     * into generated apps. Since v1.3 the official repo is baked in
+     * ([UpdateChecker.DEFAULT_REPO]); a repo saved by an older version
+     * is still honored when present.
+     */
+    private fun configuredRepo(): String {
+        val saved = prefs().getString(KEY_REPO, null)?.trim()
+        return if (saved != null && REPO_RE.matches(saved)) saved
+        else UpdateChecker.DEFAULT_REPO
     }
 
     private fun updateFeedUrlFor(repo: String): String {
-        return "https://api.github.com/repos/$repo/releases/latest"
+        return UpdateChecker.feedUrl(repo)
+    }
+
+    // ------------------------------------------------------------------
+    // permission defaults (edited on the settings page)
+    // ------------------------------------------------------------------
+
+    private var appliedDefaultsRev = -1L
+
+    private fun applyPermissionDefaults() {
+        val p = prefs()
+        permMic.isChecked = p.getBoolean(KEY_DEF_MIC, false)
+        permCamera.isChecked = p.getBoolean(KEY_DEF_CAMERA, false)
+        permLocation.isChecked = p.getBoolean(KEY_DEF_LOCATION, false)
+        permNotifications.isChecked = p.getBoolean(KEY_DEF_NOTIFICATIONS, false)
+        appliedDefaultsRev = p.getLong(KEY_DEF_REV, 0)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Re-apply only when the defaults were edited in Settings,
+        // so per-app tweaks on this form survive other round trips.
+        if (::permMic.isInitialized &&
+            prefs().getLong(KEY_DEF_REV, 0) != appliedDefaultsRev
+        ) {
+            applyPermissionDefaults()
+        }
     }
 
     // ------------------------------------------------------------------
@@ -348,7 +370,7 @@ class MainActivity : Activity() {
         val icon = selectedIcon ?: makeInitialIcon(appName).also { iconPreview.setImageBitmap(it) }
         val perms = currentPermissionToggles()
         val repo = configuredRepo()
-        val feedUrl = repo?.let { updateFeedUrlFor(it) }
+        val feedUrl = updateFeedUrlFor(repo)
 
         generateButton.isEnabled = false
         statusText.text = "生成しています…（初回は署名キーの生成に少し時間がかかります）"
@@ -363,7 +385,7 @@ class MainActivity : Activity() {
                     put("created", System.currentTimeMillis())
                     put("templateVersion", GeneratorEngine.TEMPLATE_VERSION)
                     put("perms", perms)
-                    if (repo != null) put("repo", repo)
+                    put("repo", repo)
                 }
                 runOnUiThread {
                     history.add(0, entry)
@@ -406,7 +428,7 @@ class MainActivity : Activity() {
             return
         }
         val perms = entry.optJSONObject("perms") ?: JSONObject()
-        val repo = entry.optString("repo").ifEmpty { configuredRepo() ?: "" }
+        val repo = entry.optString("repo").ifEmpty { configuredRepo() }
         val feedUrl = if (repo.isNotEmpty()) updateFeedUrlFor(repo) else null
         val oldFile = File(entry.optString("path"))
         val icon = GeneratorEngine.extractIcon(oldFile) ?: makeInitialIcon(appName)
@@ -438,26 +460,8 @@ class MainActivity : Activity() {
     // ------------------------------------------------------------------
 
     private fun checkGeneratorUpdate(manual: Boolean) {
-        val repo = configuredRepo()
-        if (repo == null) {
-            if (manual) toast("先に GitHub リポジトリ（owner/name）を設定してください")
-            return
-        }
         if (manual) statusText.text = "更新を確認しています…"
-        thread {
-            var error: String? = null
-            var tag: String? = null
-            var pageUrl: String? = null
-            try {
-                val conn = openConn(updateFeedUrlFor(repo))
-                conn.setRequestProperty("Accept", "application/vnd.github+json")
-                val text = conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
-                val json = JSONObject(text)
-                tag = json.optString("tag_name", "")
-                pageUrl = json.optString("html_url", "https://github.com/$repo/releases")
-            } catch (e: Exception) {
-                error = e.message ?: e.javaClass.simpleName
-            }
+        UpdateChecker.fetchLatest(configuredRepo()) { tag, pageUrl, error ->
             runOnUiThread {
                 when {
                     error != null -> {
@@ -468,7 +472,9 @@ class MainActivity : Activity() {
                     tag.isNullOrEmpty() -> {
                         if (manual) statusText.text = "リリースが見つかりませんでした"
                     }
-                    compareVersions(tag!!, GeneratorEngine.APP_VERSION_NAME) > 0 -> {
+                    UpdateChecker.compareVersions(
+                        tag!!, GeneratorEngine.APP_VERSION_NAME
+                    ) > 0 -> {
                         showGeneratorUpdateDialog(tag!!, pageUrl!!)
                     }
                     else -> {
@@ -499,26 +505,6 @@ class MainActivity : Activity() {
             }
             .setNegativeButton("あとで", null)
             .show()
-    }
-
-    /** Numeric dotted-version compare: "v1.10" > "1.2" etc. */
-    private fun compareVersions(a: String, b: String): Int {
-        val pa = parseVersion(a)
-        val pb = parseVersion(b)
-        for (i in 0 until maxOf(pa.size, pb.size)) {
-            val x = pa.getOrElse(i) { 0 }
-            val y = pb.getOrElse(i) { 0 }
-            if (x != y) return x.compareTo(y)
-        }
-        return 0
-    }
-
-    private fun parseVersion(v: String): List<Int> {
-        val core = v.trim().removePrefix("v").removePrefix("V")
-            .substringBefore("-")
-        return core.split(".").map { part ->
-            part.takeWhile { it.isDigit() }.toIntOrNull() ?: 0
-        }
     }
 
     // ------------------------------------------------------------------
@@ -617,11 +603,32 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * Installing a generated APK from アプリカ first shows a short
+     * Play Protect heads-up (v1.3): sideloaded apps may trigger a
+     * Google Play Protect confirmation, which no app can suppress or
+     * scope. The guidance is shown only here, i.e. only when installing
+     * a generated app from within アプリカ.
+     */
     private fun installApk(file: File) {
         if (!file.exists()) {
             toast("ファイルが見つかりません")
             return
         }
+        AlertDialog.Builder(this)
+            .setTitle("インストールの前に")
+            .setMessage(
+                "このあと Android のインストール確認が開きます。" +
+                    "Google Play プロテクトの確認画面が出た場合は、内容を確認して" +
+                    "「そのままインストール」を選んでください。" +
+                    "（ストア外のアプリへの標準の確認で、アプリ側では消せません）"
+            )
+            .setPositiveButton("インストールに進む") { _, _ -> doInstallApk(file) }
+            .setNegativeButton("キャンセル", null)
+            .show()
+    }
+
+    private fun doInstallApk(file: File) {
         val uri = GenFileProvider.uriFor(file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
@@ -664,6 +671,11 @@ class MainActivity : Activity() {
     companion object {
         private const val REQ_PICK_IMAGE = 42
         private const val KEY_REPO = "gh_repo"
+        const val KEY_DEF_MIC = "def_perm_microphone"
+        const val KEY_DEF_CAMERA = "def_perm_camera"
+        const val KEY_DEF_LOCATION = "def_perm_location"
+        const val KEY_DEF_NOTIFICATIONS = "def_perm_notifications"
+        const val KEY_DEF_REV = "def_perm_rev"
         private val PACKAGE_RE = Regex("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$")
         private val REPO_RE = Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     }

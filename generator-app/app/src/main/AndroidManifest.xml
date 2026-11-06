@@ -22,6 +22,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name="app.webgen.generator.SettingsActivity"
+            android:exported="false" />
         <!-- Serves generated APKs to the installer / share targets.
              Custom provider (no AndroidX FileProvider in this project);
              authority is bound to this app's own package. -->

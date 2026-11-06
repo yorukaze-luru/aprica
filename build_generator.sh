@@ -51,7 +51,7 @@ echo "== 2. aapt2 link (manifest + resources + assets incl. template.apk) =="
   -A "$APP/src/main/assets" \
   --java "$WORK/gen" \
   --min-sdk-version 26 --target-sdk-version 34 \
-  --version-code 3 --version-name 1.2 \
+  --version-code 4 --version-name 1.3 \
   "$WORK/compiled/res.zip"
 
 echo "== 3. kotlinc (no daemon; Kotlin + Java mixed sources + generated R) =="

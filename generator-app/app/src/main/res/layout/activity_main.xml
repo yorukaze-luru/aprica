@@ -9,12 +9,25 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="サイトをアプリ化"
-            android:textSize="22sp"
-            android:textStyle="bold" />
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="アプリカ"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/settingsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="☰ 設定" />
+        </LinearLayout>
 
         <TextView
             android:layout_width="wrap_content"
@@ -152,48 +165,6 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:textSize="13sp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="設定"
-            android:textSize="17sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="更新チェック先 GitHub リポジトリ（owner/name）" />
-
-        <EditText
-            android:id="@+id/repoInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="例: your-name/aprica（空欄で更新チェック無効）"
-            android:inputType="text"
-            android:singleLine="true" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="設定すると、起動時と下のボタンで GitHub Releases の新版を確認します。新しいAPKも同じ署名キーで署名されているため、上書きインストールできます。生成したアプリへも、このリポジトリが更新フィードとして書き込まれます。"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/checkUpdateButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="更新を確認" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="現在のバージョン: アプリカ v1.2"
-            android:textSize="12sp" />
 
         <TextView
             android:layout_width="wrap_content"
