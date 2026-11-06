@@ -22,7 +22,7 @@ object GeneratorEngine {
     const val TEMPLATE_VERSION = 6
 
     /** Generator app versionName (kept in sync with build_generator.sh). */
-    const val APP_VERSION_NAME = "1.6.1"
+    const val APP_VERSION_NAME = "1.7.0"
 
     private val DENSITIES = listOf(
         "mdpi" to 48, "hdpi" to 72, "xhdpi" to 96, "xxhdpi" to 144, "xxxhdpi" to 192

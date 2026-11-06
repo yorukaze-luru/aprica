@@ -613,13 +613,7 @@ class MainActivity : Activity() {
                     row.addView(smallButton("インストール") { installApk(file, entryPkg) })
             }
             row.addView(smallButton("複製") { duplicateToForm(entry) })
-            row.addView(smallButton("削除") {
-                file.delete()
-                history.remove(entry)
-                saveHistory()
-                refreshHistory()
-                toast("削除しました")
-            })
+            row.addView(smallButton("削除") { confirmDelete(entry, file) })
             container.addView(row)
             historyList.addView(container)
         }
@@ -687,6 +681,59 @@ class MainActivity : Activity() {
             startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: Exception) {
             toast("起動できませんでした")
+        }
+    }
+
+    /**
+     * 「削除」: always confirm first (the APK file cannot be restored).
+     * When the generated app is still installed, offer to uninstall
+     * it too — uninstalling is the only way its storage (WebView
+     * data, logins) is removed, since another app's private storage
+     * cannot be touched from アプリカ. The system shows its own
+     * uninstall confirmation afterwards.
+     */
+    private fun confirmDelete(entry: JSONObject, file: File) {
+        val pkg = entry.optString("pkg")
+        val name = entry.optString("name")
+        val builder = AlertDialog.Builder(this)
+            .setTitle("削除しますか？")
+            .setNegativeButton("キャンセル", null)
+        if (isInstalled(pkg)) {
+            builder.setMessage(
+                "「$name」の生成APKと履歴を削除します。\n" +
+                    "インストール済みのアプリ本体と、そのストレージ（ログイン情報など）も" +
+                    "消す場合は「アプリもアンインストール」を選んでください。"
+            )
+            builder.setNeutralButton("APKと履歴だけ削除") { _, _ ->
+                deleteEntry(entry, file)
+            }
+            builder.setPositiveButton("アプリもアンインストール") { _, _ ->
+                deleteEntry(entry, file)
+                uninstallApp(pkg)
+            }
+        } else {
+            builder.setMessage("「$name」の生成APKと履歴を削除します。")
+            builder.setPositiveButton("削除") { _, _ -> deleteEntry(entry, file) }
+        }
+        builder.show()
+    }
+
+    private fun deleteEntry(entry: JSONObject, file: File) {
+        file.delete()
+        history.remove(entry)
+        saveHistory()
+        refreshHistory()
+        toast("削除しました")
+    }
+
+    private fun uninstallApp(pkg: String) {
+        try {
+            startActivity(
+                Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkg"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (e: Exception) {
+            toast("アンインストール画面を開けませんでした")
         }
     }
 
