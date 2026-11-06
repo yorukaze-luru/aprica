@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var generateButton: Button
     private lateinit var historyList: LinearLayout
+    private lateinit var formScroll: android.widget.ScrollView
 
     private var selectedIcon: Bitmap? = null
     private var pkgUserEdited = false
@@ -88,6 +89,7 @@ class MainActivity : Activity() {
         statusText = findViewById(R.id.statusText)
         generateButton = findViewById(R.id.generateButton)
         historyList = findViewById(R.id.historyList)
+        formScroll = findViewById(R.id.formScroll)
 
         pkgInput.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
@@ -175,6 +177,9 @@ class MainActivity : Activity() {
         ) {
             applyPermissionDefaults()
         }
+        // Install state may have changed while we were away
+        // (install finished, app uninstalled, ...).
+        if (::historyList.isInitialized) refreshHistory()
     }
 
     // ------------------------------------------------------------------
@@ -440,7 +445,7 @@ class MainActivity : Activity() {
      * from the previously generated APK when possible. The entry is
      * updated in place; installing the result uses the normal flow.
      */
-    private fun regenerate(entry: JSONObject) {
+    private fun regenerate(entry: JSONObject, thenInstall: Boolean = false) {
         val url = entry.optString("url")
         val appName = entry.optString("name")
         val pkg = entry.optString("pkg")
@@ -465,8 +470,13 @@ class MainActivity : Activity() {
                     if (repo.isNotEmpty()) entry.put("repo", repo)
                     saveHistory()
                     refreshHistory()
-                    statusText.text = "再生成しました: ${file.absolutePath}（「インストール」から上書きできます）"
-                    toast("再生成しました")
+                    if (thenInstall) {
+                        statusText.text = "再生成しました: ${file.absolutePath}"
+                        installApk(file, pkg)
+                    } else {
+                        statusText.text = "再生成しました: ${file.absolutePath}（「インストール」から上書きできます）"
+                        toast("再生成しました")
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
@@ -591,11 +601,18 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.START
             }
-            row.addView(smallButton("インストール") { installApk(file, entry.optString("pkg")) })
-            if (updateAvailable) {
-                row.addView(smallButton("再生成") { regenerate(entry) })
+            val entryPkg = entry.optString("pkg")
+            when {
+                updateAvailable ->
+                    row.addView(smallButton("アップデート") {
+                        regenerate(entry, thenInstall = true)
+                    })
+                isInstalled(entryPkg) ->
+                    row.addView(smallButton("起動") { launchApp(entryPkg) })
+                else ->
+                    row.addView(smallButton("インストール") { installApk(file, entryPkg) })
             }
-            row.addView(smallButton("共有") { shareApk(file) })
+            row.addView(smallButton("複製") { duplicateToForm(entry) })
             row.addView(smallButton("削除") {
                 file.delete()
                 history.remove(entry)
@@ -648,18 +665,71 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun shareApk(file: File) {
-        if (!file.exists()) {
-            toast("ファイルが見つかりません")
+    /** Installed-state of a generated app. Visibility of launcher
+     *  apps is declared via <queries> in the manifest. */
+    private fun isInstalled(pkg: String): Boolean {
+        if (pkg.isEmpty()) return false
+        return try {
+            packageManager.getPackageInfo(pkg, 0)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun launchApp(pkg: String) {
+        val intent = packageManager.getLaunchIntentForPackage(pkg)
+        if (intent == null) {
+            toast("起動できませんでした")
             return
         }
-        val uri = GenFileProvider.uriFor(file)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/vnd.android.package-archive"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        try {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            toast("起動できませんでした")
         }
-        startActivity(Intent.createChooser(intent, "APKを共有"))
+    }
+
+    /**
+     * 「複製」: copy a history entry back into the creation form so the
+     * user can generate a variant. The package must differ from the
+     * original (same-package apps cannot coexist), so a unique
+     * ".copy" suffix is proposed; the icon is carried over from the
+     * generated APK when it can be extracted.
+     */
+    private fun duplicateToForm(entry: JSONObject) {
+        urlInput.setText(entry.optString("url"))
+        nameInput.setText(entry.optString("name"))
+        val basePkg = entry.optString("pkg")
+        var candidate = if (basePkg.isNotEmpty()) "$basePkg.copy" else ""
+        val taken = history.map { it.optString("pkg") }.toSet()
+        var n = 2
+        while (candidate in taken) {
+            candidate = "$basePkg.copy${n++}"
+        }
+        pkgUserEdited = true
+        settingPkg = true
+        pkgInput.setText(candidate)
+        settingPkg = false
+        val perms = entry.optJSONObject("perms")
+        if (perms != null) {
+            permMic.isChecked = perms.optBoolean("microphone")
+            permCamera.isChecked = perms.optBoolean("camera")
+            permLocation.isChecked = perms.optBoolean("location")
+            permNotifications.isChecked = perms.optBoolean("notifications")
+        }
+        val icon = GeneratorEngine.extractIcon(File(entry.optString("path")))
+        if (icon != null) {
+            selectedIcon = icon
+            iconPreview.setImageBitmap(icon)
+            iconStatus.text = "複製元のアイコンを引き継ぎました"
+        } else {
+            selectedIcon = null
+            iconPreview.setImageBitmap(null)
+            iconStatus.text = "アイコン未選択（生成時にアプリ名の頭文字アイコンを自動生成します）"
+        }
+        formScroll.smoothScrollTo(0, 0)
+        toast("フォームに複製しました。内容を確認して「APKを生成」してください")
     }
 
     private fun toast(msg: String) {

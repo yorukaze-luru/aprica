@@ -3,6 +3,16 @@
     package="app.webgen.generator">
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Generated apps are launcher apps; declaring this intent makes
+         them visible to getPackageInfo / getLaunchIntentForPackage
+         (install state, launch button, silent-update checks). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
