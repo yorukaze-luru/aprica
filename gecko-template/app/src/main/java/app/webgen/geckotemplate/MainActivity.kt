@@ -38,16 +38,18 @@ import java.net.URL
 import kotlin.concurrent.thread
 
 /**
- * Template site app (GeckoView edition, templateVersion 2) — the
+ * Template site app (GeckoView edition, templateVersion 3) — the
  * Gecko-engine counterpart of the WebView template (template-app,
  * v6). Single Activity, framework Android APIs + GeckoView only.
  *
  * On startup it reads assets/site_config.json:
  *   {"url": "https://...", "name": "...",
- *    "templateVersion": 2,                    // template version baked in
+ *    "templateVersion": 3,                    // template version baked in
  *    "notifications": true,                   // ask POST_NOTIFICATIONS once
  *    "permissions": {"microphone": true, "camera": false,
  *                    "location": false, "notifications": true},
+ *    "pushMode": "hub",                       // optional: "hub" (default) or
+ *                                             // "self" — see PushBridge
  *    "updateFeedUrl": "https://..."}          // optional update feed
  * and shows the URL in a full-screen GeckoView. The generator patches
  * site_config.json, the manifest package/label literals, the launcher
@@ -202,7 +204,29 @@ class MainActivity : Activity() {
         handleNotifIntent(intent)
 
         maybeRequestNotificationPermission()
+        maybeStartEmbeddedDistributor()
         checkForTemplateUpdate()
+    }
+
+    /**
+     * Template v3 self-embedding (Phase 5) — FGS start policy, app
+     * launch leg: when the baked site_config.json has
+     * "pushMode": "self" AND notifications ON, start the embedded
+     * distributor's relay foreground service from here, where the
+     * app is in the foreground and startForegroundService is
+     * unrestricted. [app.webgen.updist.UpDistributor.start]
+     * re-checks the same baked-config gate internally, so in hub
+     * mode (or notifications OFF) this is a guaranteed no-op and
+     * the FGS never starts. The other legs of the policy: the
+     * distributor receiver lazily starts/refreshes the service on
+     * the first accepted registration, and BOOT_COMPLETED restarts
+     * it when registrations persist (both gated the same way, and
+     * background-start failures are caught inside UpDistributor).
+     */
+    private fun maybeStartEmbeddedDistributor() {
+        if (siteConfig.optString("pushMode", "hub") != "self") return
+        if (!siteConfig.optBoolean("notifications", false)) return
+        app.webgen.updist.UpDistributor.start(this, null)
     }
 
     override fun onNewIntent(intent: Intent) {

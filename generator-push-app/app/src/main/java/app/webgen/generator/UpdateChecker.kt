@@ -7,7 +7,7 @@ import kotlin.concurrent.thread
 
 /**
  * Shared GitHub Releases update check for the PUSH edition generator
- * (アプリカ Push). Used silently at startup (MainActivity) and manually
+ * (Pアプリカ). Used silently at startup (MainActivity) and manually
  * from the settings page (SettingsActivity).
  *
  * Push-edition releases share the [DEFAULT_REPO] (yorukaze-luru/aprica)

@@ -28,8 +28,14 @@
 #   * multi-dex packaging: zip classes*.dex (push jars push the build
 #     past the single-dex limit; zipping only classes.dex would
 #     silently drop classes2.dex).
+# Template v3 (Phase 5) changes ONE thing vs v2: distributor
+# preference in PushBridge.ensureDistributor — when the Aprica Push
+# generator app (package app.webgen.generator.push) is installed as
+# a UnifiedPush distributor, it is saved as the current distributor
+# (UnifiedPush.saveDistributor, connector 3.3.5) before register;
+# otherwise the v2 current/default flow runs unchanged.
 # Output: ~/workspace/web2apk/gecko-template/gecko-template.apk
-# (package app.webgen.geckotemplate, templateVersion 2 — the patcher
+# (package app.webgen.geckotemplate, templateVersion 3 — the patcher
 # turns this into stand-alone site apps)
 set -euo pipefail
 
@@ -50,8 +56,8 @@ WORK="$GT/build"
 KS="$ROOT/test-keystore-TEST-ONLY.jks"
 # Same password contract as build_template.sh (env var, with the same
 # default the template script carries). Never echo this value.
-if [ -z "${WEB2APK_KS_PASS:-change-me}" ]; then
-  WEB2APK_KS_PASS=$(sed -n 's/.*WEB2APK_KS_PASS:-change-me}]*\)}.*/\1/p' "$ROOT/build_template.sh" | head -1)
+if [ -z "${WEB2APK_KS_PASS:-}" ]; then
+  WEB2APK_KS_PASS=$(sed -n 's/.*WEB2APK_KS_PASS:-\([^}]*\)}.*/\1/p' "$ROOT/build_template.sh" | head -1)
 fi
 KS_PASS="${WEB2APK_KS_PASS:?could not determine keystore password}"
 ABI="arm64-v8a"
@@ -147,7 +153,7 @@ echo "== 3. aapt2 link (with R generation for library packages) =="
   --manifest "$WORK/AndroidManifest.xml" \
   -A "$WORK/assets" \
   --min-sdk-version 26 --target-sdk-version 34 \
-  --version-code 2 --version-name 2.0 \
+  --version-code 3 --version-name 3.0 \
   --auto-add-overlay \
   --java "$WORK/gen" \
   --output-text-symbols "$WORK/symbols.txt" \

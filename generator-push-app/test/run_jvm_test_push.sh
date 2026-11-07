@@ -22,3 +22,11 @@ javac -encoding UTF-8 -cp "$APKSIGNER_JAR" -d "$WORK/classes" \
 java -Xmx2g -cp "$WORK/classes:$APKSIGNER_JAR" TestPushMain \
   "$FORK/app/src/main/assets/template.apk" "$ROOT/sample_icon.png" "$WORK/keys" \
   "$FORK/sample-geckopush2.apk"
+
+# Phase 5: two pushMode samples (hub + self config plumbing)
+java -Xmx2g -cp "$WORK/classes:$APKSIGNER_JAR" TestPushMain \
+  "$FORK/app/src/main/assets/template.apk" "$ROOT/sample_icon.png" "$WORK/keys" \
+  "$FORK/sample-pushmode-hub.apk" hub app.webgen.sample.pushhub "プッシュ方式hub"
+java -Xmx2g -cp "$WORK/classes:$APKSIGNER_JAR" TestPushMain \
+  "$FORK/app/src/main/assets/template.apk" "$ROOT/sample_icon.png" "$WORK/keys" \
+  "$FORK/sample-pushmode-self.apk" self app.webgen.sample.pushself "プッシュ方式self"

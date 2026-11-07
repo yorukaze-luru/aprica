@@ -16,6 +16,7 @@ import org.mozilla.geckoview.WebNotification
 import org.mozilla.geckoview.WebNotificationDelegate
 import org.mozilla.geckoview.WebPushDelegate
 import org.mozilla.geckoview.WebPushSubscription
+import org.json.JSONObject
 import org.unifiedpush.android.connector.FailedReason
 import org.unifiedpush.android.connector.UnifiedPush
 import org.unifiedpush.android.connector.data.PushEndpoint
@@ -50,6 +51,23 @@ import java.util.concurrent.ConcurrentHashMap
  * Test-only spike artifacts are NOT carried over: no status overlay,
  * no self-send, no RawTapReceiver, no on-screen / file log. Logging
  * here is Logcat-only (tag "WebGenGeckoPush").
+ *
+ * Template v3 (Phase 5) adds ONE behaviour on top of v2: the
+ * generation-time delivery model, site_config.json "pushMode"
+ * ("hub" | "self", absent -> "hub"), driving distributor selection
+ * in [ensureDistributor] on every subscribe attempt:
+ *  - "hub": if the Aprica Push generator app itself (package
+ *    [PREFERRED_DISTRIBUTOR]) is installed as a UnifiedPush
+ *    distributor, it is saved as the current distributor and used,
+ *    ahead of any other distributor (e.g. ntfy). Absent -> the v2
+ *    current/default flow runs unchanged.
+ *  - "self": the generated app embeds its own distributor (added by
+ *    a follow-up pass — no distributor code exists in this build);
+ *    the app's OWN package is preferred the same way. While no
+ *    own-package distributor is declared, selection finds nothing
+ *    and degrades exactly like the no-distributor case (graceful
+ *    reject), never a crash and never a silent fallback to another
+ *    distributor.
  */
 object PushBridge {
 
@@ -57,6 +75,41 @@ object PushBridge {
     private const val PREFS = "pushbridge"
     private const val CHANNEL_ID = "webpush"
     private const val MSG_FOR_DISTRIBUTOR = "WebGen Gecko (Aprica)"
+
+    /**
+     * Template v3: the Aprica Push generator app's package. In
+     * "hub" mode, when it appears in UnifiedPush.getDistributors(),
+     * it is the preferred distributor (see [ensureDistributor]).
+     */
+    private const val PREFERRED_DISTRIBUTOR = "app.webgen.generator.push"
+
+    /** site_config.json "pushMode" values (template v3). */
+    private const val PUSH_MODE_HUB = "hub"
+    private const val PUSH_MODE_SELF = "self"
+
+    @Volatile
+    private var cachedPushMode: String? = null
+
+    /**
+     * The generation-time delivery model baked into
+     * assets/site_config.json ("pushMode": "hub" | "self").
+     * Absent or unrecognised -> "hub". Read once per process; the
+     * config is an APK asset, so it cannot change at runtime.
+     */
+    private fun pushMode(context: Context): String {
+        cachedPushMode?.let { return it }
+        val mode = try {
+            val text = context.applicationContext.assets.open("site_config.json")
+                .bufferedReader().use { it.readText() }
+            val raw = JSONObject(text).optString("pushMode", PUSH_MODE_HUB)
+            if (raw == PUSH_MODE_SELF) PUSH_MODE_SELF else PUSH_MODE_HUB
+        } catch (e: Exception) {
+            Log.w(TAG, "pushMode read failed, defaulting to $PUSH_MODE_HUB: $e")
+            PUSH_MODE_HUB
+        }
+        cachedPushMode = mode
+        return mode
+    }
 
     const val EXTRA_NOTIF_TAG = "notif_tag"
 
@@ -114,6 +167,42 @@ object PushBridge {
             UnifiedPush.getDistributors(appCtx)
         } catch (e: Exception) {
             emptyList()
+        }
+        // Template v3 (Phase 5): distributor selection is driven by
+        // the generation-time "pushMode" (see pushMode()). This runs
+        // on every subscribe attempt, so a later-installed preferred
+        // distributor is picked up without template changes.
+        //  - hub: prefer the Aprica Push generator app; absent (or
+        //    save failing) -> the v2 flow below, unchanged.
+        //  - self: prefer this app's OWN package (its embedded
+        //    distributor, added by a follow-up pass). Absent or
+        //    save failing -> reject at once, exactly like the
+        //    no-distributor case; no fallback to another distributor.
+        val mode = pushMode(appCtx)
+        val preferred =
+            if (mode == PUSH_MODE_SELF) appCtx.packageName else PREFERRED_DISTRIBUTOR
+        if (distributors.contains(preferred)) {
+            try {
+                UnifiedPush.saveDistributor(appCtx, preferred)
+                Log.i(TAG, "preferred distributor selected (pushMode=$mode): $preferred")
+                onReady(true)
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "saveDistributor($preferred) failed: $e")
+                if (mode == PUSH_MODE_SELF) {
+                    onReady(false)
+                    return
+                }
+                // hub: fall through to the v2 flow below.
+            }
+        } else if (mode == PUSH_MODE_SELF) {
+            Log.w(
+                TAG,
+                "pushMode=self but no own-package distributor declared; " +
+                    "subscribe will fail gracefully"
+            )
+            onReady(false)
+            return
         }
         if (distributors.isEmpty()) {
             Log.w(TAG, "no UnifiedPush distributor installed; subscribe will fail gracefully")

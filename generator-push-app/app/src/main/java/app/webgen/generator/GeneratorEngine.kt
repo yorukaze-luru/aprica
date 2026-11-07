@@ -19,10 +19,20 @@ object GeneratorEngine {
      * app's site_config.json and into the history, where it drives the
      * "update available" marker and the regenerate flow.
      */
-    const val TEMPLATE_VERSION = 2
+    const val TEMPLATE_VERSION = 3
 
     /** Generator app versionName (kept in sync with build_generator_push.sh). */
-    const val APP_VERSION_NAME = "1.0.0"
+    const val APP_VERSION_NAME = "2.0.0"
+
+    /** Settings key: max number of history entries (Phase 5). */
+    const val KEY_GEN_LIMIT = "gen_limit"
+    const val DEFAULT_GEN_LIMIT = 10
+
+    fun generationLimit(ctx: Context): Int {
+        val v = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            .getInt(KEY_GEN_LIMIT, DEFAULT_GEN_LIMIT)
+        return v.coerceIn(1, 100)
+    }
 
     private val DENSITIES = listOf(
         "mdpi" to 48, "hdpi" to 72, "xhdpi" to 96, "xxhdpi" to 144, "xxxhdpi" to 192
@@ -64,6 +74,23 @@ object GeneratorEngine {
         icon: Bitmap?,
         permissions: JSONObject?,
         updateFeedUrl: String?
+    ): File = generate(ctx, url, appName, packageName, icon, permissions, updateFeedUrl, "hub")
+
+    /**
+     * @param pushMode push delivery model: "hub" (Pアプリカ経由) or
+     *                 "self" (アプリ内蔵); written into the generated
+     *                 app's site_config.json as "pushMode" (always
+     *                 explicitly, Phase 5).
+     */
+    fun generate(
+        ctx: Context,
+        url: String,
+        appName: String,
+        packageName: String,
+        icon: Bitmap?,
+        permissions: JSONObject?,
+        updateFeedUrl: String?,
+        pushMode: String
     ): File {
         // 1. extract bundled template.apk from assets (small; copy every time
         //    so an app update can never leave a stale template behind)
@@ -96,6 +123,7 @@ object GeneratorEngine {
             notifications = permissions?.optBoolean("notifications", false) ?: false
             templateVersion = TEMPLATE_VERSION
             this.updateFeedUrl = updateFeedUrl
+            this.pushMode = if (pushMode == "self") "self" else "hub"
         }
         val outFile = File(generatedDir(ctx), sanitizeFileName(appName) + ".apk")
         ApkBuilder.buildAndSign(

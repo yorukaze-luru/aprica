@@ -45,13 +45,17 @@ public class TestPushMain {
         o.camera = false;
         o.location = false;
         o.notifications = true;
-        o.templateVersion = 2;
+        o.templateVersion = 3;
+        o.pushMode = args.length > 4 ? args[4] : "hub";
         o.updateFeedUrl = "https://api.github.com/repos/yorukaze-luru/aprica/releases/latest";
+        String pkg = args.length > 5 ? args[5] : "app.webgen.sample.geckopush2";
+        String name = args.length > 6 ? args[6] : "プッシュサンプル2";
         ApkBuilder.Result r = ApkBuilder.buildAndSign(
                 template, out,
                 "https://tests.peter.sh/push-message-generator/",
-                "プッシュサンプル2", "app.webgen.sample.geckopush2",
+                name, pkg,
                 icons, keys, o);
+        System.out.println("sample: pushMode=" + o.pushMode + " pkg=" + pkg);
         System.out.println("patched: config=" + r.configReplaced
                 + " manifest=" + r.manifestPatched + " icons=" + r.iconsReplaced
                 + " permissionsDisabled=" + r.permissionsDisabled);

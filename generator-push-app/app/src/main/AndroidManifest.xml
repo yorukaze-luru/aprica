@@ -14,13 +14,19 @@
         </intent>
     </queries>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Built-in UnifiedPush distributor (Phase 5, shared module) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="アプリカ Push"
+        android:label="Pアプリカ"
         android:largeHeap="true"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
@@ -40,6 +46,30 @@
         <receiver
             android:name="app.webgen.generator.InstallResultReceiver"
             android:exported="false" />
+
+        <!-- UnifiedPush distributor (DISTRIBUTOR-CONTRACT.md §1.4):
+             exported receiver; REGISTER is the discovery action,
+             UNREGISTER / MESSAGE_ACK are package-addressed to us. -->
+        <receiver
+            android:name="app.webgen.updist.DistributorReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.distributor.REGISTER" />
+                <action android:name="org.unifiedpush.android.distributor.UNREGISTER" />
+                <action android:name="org.unifiedpush.android.distributor.MESSAGE_ACK" />
+            </intent-filter>
+        </receiver>
+        <service
+            android:name="app.webgen.updist.NtfyRelayService"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
+        <receiver
+            android:name="app.webgen.updist.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
         <!-- Serves generated APKs to the installer / share targets.
              Custom provider (no AndroidX FileProvider in this project);
              authority is bound to this app's own package. -->

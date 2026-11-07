@@ -7,6 +7,8 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.EditText
+import android.widget.Toast
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
@@ -46,11 +48,99 @@ class SettingsActivity : Activity() {
 
         updateStatus = findViewById(R.id.updateStatus)
         findViewById<TextView>(R.id.versionText).text =
-            "現在のバージョン: アプリカ Push v${GeneratorEngine.APP_VERSION_NAME}"
+            "現在のバージョン: Pアプリカ v${GeneratorEngine.APP_VERSION_NAME}"
         findViewById<Button>(R.id.checkUpdateButton).setOnClickListener {
             checkUpdate()
         }
         findViewById<Button>(R.id.backButton).setOnClickListener { finish() }
+        setupDistributorCard()
+        setupGenLimitCard()
+    }
+
+    // ---------------- Phase 5: distributor + generation limit --------
+
+    private lateinit var distributorStatus: TextView
+
+    private fun setupDistributorCard() {
+        distributorStatus = findViewById(R.id.distributorStatus)
+        val toggle = findViewById<Switch>(R.id.distributorToggle)
+        var binding = true
+        toggle.isChecked = app.webgen.updist.UpDistributor.isEnabled(this)
+        binding = false
+        toggle.setOnCheckedChangeListener { _, checked ->
+            if (binding) return@setOnCheckedChangeListener
+            // OFF: stops the relay FGS; DistributorReceiver then replies
+            // REGISTRATION_FAILED/INTERNAL_ERROR to new REGISTERs so
+            // clients fall back cleanly. Generation, history and the
+            // updater are untouched by this toggle.
+            app.webgen.updist.UpDistributor.setEnabled(this, checked)
+            if (checked) {
+                app.webgen.updist.UpDistributor.start(
+                    this, MainActivity.DIST_NOTIFICATION_LABEL
+                )
+            }
+            refreshDistributorStatus()
+        }
+        refreshDistributorStatus()
+    }
+
+    private fun refreshDistributorStatus() {
+        if (!::distributorStatus.isInitialized) return
+        val st = app.webgen.updist.UpDistributor.status(this)
+        val stateLabel = when {
+            !st.enabled -> "停止中"
+            st.connectionState == app.webgen.updist.UpDistributor.STATE_CONNECTED -> "接続中"
+            st.connectionState == app.webgen.updist.UpDistributor.STATE_CONNECTING ->
+                "接続中（接続を試みています）"
+            st.connectionState == app.webgen.updist.UpDistributor.STATE_WAITING ->
+                "待機中（登録アプリなし）"
+            else -> "停止中"
+        }
+        distributorStatus.text =
+            "接続状態: $stateLabel\n" +
+                "登録アプリ数: ${st.registeredPackageCount}（登録件数: ${st.registeredAppCount}）"
+    }
+
+    // Live status: poll the distributor status while this page is
+    // visible so the connection state line stays current.
+    private val statusHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val statusPoll = object : Runnable {
+        override fun run() {
+            refreshDistributorStatus()
+            statusHandler.postDelayed(this, 2_000)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshDistributorStatus()
+        statusHandler.removeCallbacks(statusPoll)
+        statusHandler.postDelayed(statusPoll, 2_000)
+    }
+
+    override fun onPause() {
+        statusHandler.removeCallbacks(statusPoll)
+        super.onPause()
+    }
+
+    private fun setupGenLimitCard() {
+        val input = findViewById<EditText>(R.id.genLimitInput)
+        val status = findViewById<TextView>(R.id.genLimitStatus)
+        input.setText(GeneratorEngine.generationLimit(this).toString())
+        status.text = "現在の上限: ${GeneratorEngine.generationLimit(this)} 件"
+        findViewById<Button>(R.id.genLimitSaveButton).setOnClickListener {
+            val parsed = input.text.toString().trim().toIntOrNull()
+            if (parsed == null) {
+                Toast.makeText(this, "上限は数字で入力してください", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val clamped = parsed.coerceIn(1, 100)
+            prefs().edit().putInt(GeneratorEngine.KEY_GEN_LIMIT, clamped).apply()
+            input.setText(clamped.toString())
+            status.text = "現在の上限: $clamped 件" +
+                if (parsed != clamped) "（1〜100の範囲に収めました）" else ""
+            Toast.makeText(this, "上限を $clamped 件に設定しました", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun prefs() = getSharedPreferences("settings", MODE_PRIVATE)
@@ -122,7 +212,7 @@ class SettingsActivity : Activity() {
                     }
                     else ->
                         updateStatus.text =
-                            "最新です（アプリカ Push v${GeneratorEngine.APP_VERSION_NAME}）"
+                            "最新です（Pアプリカ v${GeneratorEngine.APP_VERSION_NAME}）"
                 }
             }
         }

@@ -23,7 +23,7 @@
             <ImageView
                 android:layout_width="46dp"
                 android:layout_height="46dp"
-                android:contentDescription="アプリカ Push"
+                android:contentDescription="Pアプリカ"
                 android:src="@mipmap/ic_launcher" />
 
             <LinearLayout
@@ -36,7 +36,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="アプリカ Push"
+                    android:text="Pアプリカ"
                     android:textColor="@color/white"
                     android:textSize="22sp"
                     android:textStyle="bold" />
@@ -193,7 +193,7 @@
                 android:id="@+id/permNotifications"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="通知（アプリ側の通知のみ。Webプッシュ通知は非対応）" 
+                android:text="通知（Webプッシュ含む）" 
                 android:textColor="@color/ink"/>
         </LinearLayout>
 
@@ -259,6 +259,55 @@
                 android:text="アイコン未選択（生成時にアプリ名の頭文字アイコンを自動生成します）"
                 android:textColor="@color/ink_sub"
                 android:textSize="12sp" />
+        </LinearLayout>
+
+
+        <!-- Card: push delivery mode (Phase 5) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="プッシュ配信方式"
+                android:textColor="@color/ink"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Webプッシュの配信方法です。「Pアプリカ経由」はこのアプリ内蔵の配信機能を使います。「アプリ内蔵」は生成アプリ単体で配信まで行います。"
+                android:textColor="@color/ink_sub"
+                android:textSize="12sp" />
+
+            <RadioGroup
+                android:id="@+id/pushModeGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="vertical">
+
+                <RadioButton
+                    android:id="@+id/pushModeHub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Pアプリカ経由（推奨）"
+                    android:textColor="@color/ink" />
+
+                <RadioButton
+                    android:id="@+id/pushModeSelf"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="アプリ内蔵"
+                    android:textColor="@color/ink" />
+            </RadioGroup>
         </LinearLayout>
 
         <Button

@@ -21,6 +21,8 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -44,6 +46,8 @@ class MainActivity : Activity() {
     private lateinit var permCamera: Switch
     private lateinit var permLocation: Switch
     private lateinit var permNotifications: Switch
+    private lateinit var pushModeHub: RadioButton
+    private lateinit var pushModeSelf: RadioButton
     private lateinit var iconPreview: ImageView
     private lateinit var iconStatus: TextView
     private lateinit var statusText: TextView
@@ -84,6 +88,9 @@ class MainActivity : Activity() {
         permCamera = findViewById(R.id.permCamera)
         permLocation = findViewById(R.id.permLocation)
         permNotifications = findViewById(R.id.permNotifications)
+        pushModeHub = findViewById(R.id.pushModeHub)
+        pushModeSelf = findViewById(R.id.pushModeSelf)
+        pushModeHub.isChecked = true
         iconPreview = findViewById(R.id.iconPreview)
         iconStatus = findViewById(R.id.iconStatus)
         statusText = findViewById(R.id.statusText)
@@ -123,6 +130,21 @@ class MainActivity : Activity() {
         }
         // Permission toggles start from the defaults chosen in Settings.
         applyPermissionDefaults()
+
+        // Built-in UnifiedPush distributor (Phase 5): keep the ntfy
+        // relay foreground service running while the distributor is
+        // enabled, and make sure its persistent notification can be
+        // shown (POST_NOTIFICATIONS, API 33+).
+        app.webgen.updist.UpDistributor.start(this, DIST_NOTIFICATION_LABEL)
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            @Suppress("DEPRECATION")
+            requestPermissions(
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQ_POST_NOTIFICATIONS
+            )
+        }
 
         loadHistory()
         refreshHistory()
@@ -373,6 +395,26 @@ class MainActivity : Activity() {
     // ------------------------------------------------------------------
 
     private fun generate() {
+        // Generation limit (Phase 5): a NEW generation is blocked when
+        // the history already holds >= the configured limit entries.
+        // Lowering the limit never deletes anything; it only blocks
+        // until entries are deleted or the limit is raised again.
+        // 複製 goes through this same generate() path (it only fills
+        // the form), so a duplicated generation counts too; 再生成
+        // updates an existing entry in place and does NOT count.
+        val limit = GeneratorEngine.generationLimit(this)
+        if (history.size >= limit) {
+            AlertDialog.Builder(this)
+                .setTitle("生成できるアプリの上限に達しています")
+                .setMessage(
+                    "履歴が上限の $limit 件に達しているため、新しいアプリを生成できません。" +
+                        "履歴の項目を削除するか、設定ページで「生成できるアプリの上限」を" +
+                        "引き上げると、また生成できるようになります。"
+                )
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
         val rawUrl = urlInput.text.toString().trim()
         if (rawUrl.isEmpty()) {
             toast("サイトURLを入力してください")
@@ -400,6 +442,7 @@ class MainActivity : Activity() {
         }
         val icon = selectedIcon ?: makeInitialIcon(appName).also { iconPreview.setImageBitmap(it) }
         val perms = currentPermissionToggles()
+        val pushMode = if (pushModeSelf.isChecked) "self" else "hub"
         val repo = configuredRepo()
         val feedUrl = updateFeedUrlFor(repo)
 
@@ -407,7 +450,7 @@ class MainActivity : Activity() {
         statusText.text = "生成しています…（初回は署名キーの生成に少し時間がかかります）"
         thread {
             try {
-                val file = GeneratorEngine.generate(this, url, appName, pkg, icon, perms, feedUrl)
+                val file = GeneratorEngine.generate(this, url, appName, pkg, icon, perms, feedUrl, pushMode)
                 val entry = JSONObject().apply {
                     put("name", appName)
                     put("url", url)
@@ -417,6 +460,7 @@ class MainActivity : Activity() {
                     put("templateVersion", GeneratorEngine.TEMPLATE_VERSION)
                     put("perms", perms)
                     put("repo", repo)
+                    put("pushMode", pushMode)
                 }
                 runOnUiThread {
                     history.add(0, entry)
@@ -459,6 +503,7 @@ class MainActivity : Activity() {
             return
         }
         val perms = entry.optJSONObject("perms") ?: JSONObject()
+        val pushMode = entry.optString("pushMode").ifEmpty { "hub" }
         val repo = entry.optString("repo").ifEmpty { configuredRepo() }
         val feedUrl = if (repo.isNotEmpty()) updateFeedUrlFor(repo) else null
         val oldFile = File(entry.optString("path"))
@@ -467,7 +512,7 @@ class MainActivity : Activity() {
         statusText.text = "再生成しています…: $appName"
         thread {
             try {
-                val file = GeneratorEngine.generate(this, url, appName, pkg, icon, perms, feedUrl)
+                val file = GeneratorEngine.generate(this, url, appName, pkg, icon, perms, feedUrl, pushMode)
                 runOnUiThread {
                     entry.put("path", file.absolutePath)
                     entry.put("created", System.currentTimeMillis())
@@ -516,7 +561,7 @@ class MainActivity : Activity() {
                     else -> {
                         if (manual) {
                             statusText.text =
-                                "最新です（アプリカ Push v${GeneratorEngine.APP_VERSION_NAME}）"
+                                "最新です（Pアプリカ v${GeneratorEngine.APP_VERSION_NAME}）"
                         }
                     }
                 }
@@ -591,6 +636,8 @@ class MainActivity : Activity() {
                     "${entry.optString("pkg")} · ${fmt.format(Date(entry.optLong("created")))}" +
                     "\nテンプレート v$entryTemplate" +
                     (if (updateAvailable) " → v${GeneratorEngine.TEMPLATE_VERSION} に更新できます" else "") +
+                    "\n配信方式: " +
+                    (if (entry.optString("pushMode") == "self") "アプリ内蔵" else "Pアプリカ経由") +
                     if (file.exists()) "" else "\n（ファイルが見つかりません）"
                 textSize = 12f
             })
@@ -763,6 +810,8 @@ class MainActivity : Activity() {
         settingPkg = true
         pkgInput.setText(candidate)
         settingPkg = false
+        if (entry.optString("pushMode") == "self") pushModeSelf.isChecked = true
+        else pushModeHub.isChecked = true
         val perms = entry.optJSONObject("perms")
         if (perms != null) {
             permMic.isChecked = perms.optBoolean("microphone")
@@ -790,6 +839,11 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ_PICK_IMAGE = 42
+        private const val REQ_POST_NOTIFICATIONS = 43
+
+        /** Persistent-notification label for the built-in distributor
+         *  (the only app-specific string the updist package takes). */
+        const val DIST_NOTIFICATION_LABEL = "Pアプリカ：プッシュ受信待機中"
         private const val KEY_REPO = "gh_repo"
         const val KEY_DEF_MIC = "def_perm_microphone"
         const val KEY_DEF_CAMERA = "def_perm_camera"

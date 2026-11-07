@@ -72,6 +72,106 @@
                 android:textColor="@color/ink"/>
         </LinearLayout>
 
+
+        <!-- Card: distributor (Phase 5) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="プッシュ配信（内蔵配信機能）"
+                android:textColor="@color/ink"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="「Pアプリカ経由」で生成したアプリのWebプッシュを、このアプリが中継します。OFFにすると受信待機を止め、新しい登録には失敗を返します（生成・履歴・更新には影響しません）。"
+                android:textColor="@color/ink_sub"
+                android:textSize="12sp" />
+
+            <Switch
+                android:id="@+id/distributorToggle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="配信を有効にする"
+                android:textColor="@color/ink" />
+
+            <TextView
+                android:id="@+id/distributorStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="接続状態: -"
+                android:textColor="@color/ink"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- Card: generation limit (Phase 5) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="生成できるアプリの上限"
+                android:textColor="@color/ink"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="履歴の件数が上限に達すると、新しいアプリは生成できません（1〜100）。上限を下げても既存の履歴は削除されません。"
+                android:textColor="@color/ink_sub"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/genLimitInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:textColor="@color/ink"
+                android:textColorHint="@color/ink_sub"
+                android:hint="10"
+                android:inputType="number"
+                android:padding="12dp"
+                android:singleLine="true" />
+
+            <Button
+                android:id="@+id/genLimitSaveButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_button_secondary"
+                android:text="上限を保存"
+                android:textColor="@color/brand_teal_dark" />
+
+            <TextView
+                android:id="@+id/genLimitStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="@color/ink"
+                android:textSize="13sp" />
+        </LinearLayout>
+
         <!-- Card: appearance -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -118,7 +218,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="アプリカ Pushの更新"
+                android:text="Pアプリカの更新"
                 android:textColor="@color/ink"
                 android:textSize="16sp"
                 android:textStyle="bold" />

@@ -56,6 +56,14 @@ public final class ApkBuilder {
         public int templateVersion;
         /** Optional update feed URL for the generated app; may be null. */
         public String updateFeedUrl;
+        /**
+         * Push delivery model (Phase 5): "hub" (via Pアプリカ's built-in
+         * distributor) or "self" (distributor embedded in the generated
+         * app). Written into site_config.json as "pushMode"; null is
+         * treated as "hub" (the template default when the field is
+         * absent, so the schema stays backward-compatible).
+         */
+        public String pushMode;
     }
 
     // Android permission name -> dummy name used when the toggle is OFF.
@@ -213,6 +221,8 @@ public final class ApkBuilder {
             sb.append(", \"location\": ").append(o.location);
             sb.append(", \"notifications\": ").append(o.notifications);
             sb.append('}');
+            sb.append(", \"pushMode\": ")
+                    .append(jsonString(o.pushMode != null ? o.pushMode : "hub"));
             if (o.updateFeedUrl != null && !o.updateFeedUrl.isEmpty()) {
                 sb.append(", \"updateFeedUrl\": ").append(jsonString(o.updateFeedUrl));
             }

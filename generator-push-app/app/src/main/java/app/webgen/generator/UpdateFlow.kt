@@ -21,7 +21,7 @@ object UpdateFlow {
         val builder = AlertDialog.Builder(activity)
             .setTitle("新しいバージョンがあります")
             .setMessage(
-                "アプリカ Push $tag が GitHub Releases で公開されています。" +
+                "Pアプリカ $tag が GitHub Releases で公開されています。" +
                     "新しいAPKも同じ署名キーで署名されているため、そのまま上書きインストールできます。"
             )
             .setNegativeButton("あとで", null)
