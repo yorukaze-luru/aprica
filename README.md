@@ -6,6 +6,8 @@
 スマホの中で独立したアプリとして生成します。生成されたアプリはアプリ一覧に表示され、
 全画面の WebView でサイトを開きます。
 
+> プッシュ対応版『Pアプリカ』は専用リポジトリで公開しています → https://github.com/yorukaze-luru/paprica
+
 ## ダウンロード
 
 [Releases](https://github.com/yorukaze-luru/aprica/releases) から `aprica-vX.Y.apk` をダウンロードしてインストールしてください。
