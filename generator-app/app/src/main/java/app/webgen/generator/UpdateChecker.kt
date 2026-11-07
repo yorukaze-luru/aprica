@@ -49,7 +49,7 @@ object UpdateChecker {
                 if (assets != null) {
                     for (i in 0 until assets.length()) {
                         val a = assets.optJSONObject(i) ?: continue
-                        if (a.optString("name").endsWith(".apk")) {
+                        if (a.optString("name").matches(Regex("""^aprica-v\d+\.\d+\.\d+\.apk$"""))) {
                             assetUrl = a.optString("browser_download_url")
                             break
                         }
