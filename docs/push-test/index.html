@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プッシュ送信テスト</title>
+<style>
+  body {
+    font-family: sans-serif;
+    margin: 24px 16px;
+    color: #111111;
+    background: #ffffff;
+  }
+  h1 { font-size: 20px; color: #111111; }
+  input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 16px;
+    padding: 10px;
+    color: #111111;
+    background: #ffffff;
+    border: 1px solid #888888;
+    border-radius: 6px;
+  }
+  button {
+    width: 100%;
+    margin-top: 12px;
+    font-size: 16px;
+    padding: 12px;
+    color: #ffffff;
+    background: #0E9594;
+    border: none;
+    border-radius: 6px;
+  }
+  button:disabled {
+    color: #eeeeee;
+    background: #9db8b8;
+  }
+  #status {
+    margin-top: 16px;
+    font-size: 14px;
+    color: #333333;
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+  #reset {
+    display: inline-block;
+    margin-top: 20px;
+    font-size: 13px;
+    color: #0E9594;
+  }
+</style>
+</head>
+<body>
+<h1>プッシュ送信テスト</h1>
+<input type="text" id="msg" placeholder="送りたい文字">
+<button id="btn">プッシュ送信</button>
+<div id="status">読み込み中…</div>
+<a href="#" id="reset">購読をリセット</a>
+
+<script>
+'use strict';
+
+const statusEl = document.getElementById('status');
+const btn = document.getElementById('btn');
+const msgEl = document.getElementById('msg');
+
+function setStatus(text) {
+  statusEl.textContent = text;
+}
+
+function b64urlToBytes(s) {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob(b64 + pad);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function concatBytes(...arrays) {
+  let len = 0;
+  for (const a of arrays) len += a.length;
+  const out = new Uint8Array(len);
+  let off = 0;
+  for (const a of arrays) {
+    out.set(a, off);
+    off += a.length;
+  }
+  return out;
+}
+
+function shortEndpoint(endpoint) {
+  try {
+    const u = new URL(endpoint);
+    return u.host + '/…' + u.pathname.slice(-8);
+  } catch (e) {
+    return endpoint.slice(0, 40) + '…';
+  }
+}
+
+let registration = null;
+let subscription = null;
+
+async function refreshSubscription() {
+  subscription = await registration.pushManager.getSubscription();
+  if (subscription) {
+    setStatus('購読済み: ' + shortEndpoint(subscription.endpoint) +
+      '\n文字を入れて「プッシュ送信」を押すと送信します。');
+  } else {
+    setStatus('未購読\n「プッシュ送信」を押すと購読します。');
+  }
+}
+
+// RFC 8291 (aes128gcm) encryption of a single-record Web Push payload.
+async function encryptPayload(sub, plaintext) {
+  const uaPublic = new Uint8Array(sub.getKey('p256dh'));   // 65 bytes
+  const authSecret = new Uint8Array(sub.getKey('auth'));   // 16 bytes
+
+  // Import the UA public key (uncompressed point -> JWK).
+  const uaPublicKey = await crypto.subtle.importKey('jwk', {
+    kty: 'EC',
+    crv: 'P-256',
+    x: base64url(uaPublic.slice(1, 33)),
+    y: base64url(uaPublic.slice(33, 65)),
+    ext: true
+  }, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+
+  // Ephemeral sender key pair.
+  const senderPair = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const senderPublic = new Uint8Array(
+    await crypto.subtle.exportKey('raw', senderPair.publicKey)); // 65 bytes
+
+  // ECDH shared secret.
+  const ecdhSecret = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: uaPublicKey }, senderPair.privateKey, 256));
+
+  // IKM = HKDF(authSecret as salt, ecdhSecret as IKM,
+  //            info = "WebPush: info" || 0x00 || uaPublic || senderPublic)
+  const enc = new TextEncoder();
+  const ikmKey = await crypto.subtle.importKey(
+    'raw', ecdhSecret, 'HKDF', false, ['deriveBits']);
+  const keyInfo = concatBytes(enc.encode('WebPush: info'), new Uint8Array([0]), uaPublic, senderPublic);
+  const ikm = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: authSecret, info: keyInfo },
+    ikmKey, 256));
+
+  // CEK / nonce = HKDF(salt, IKM, "Content-Encoding: ...\0")
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const ikmKey2 = await crypto.subtle.importKey(
+    'raw', ikm, 'HKDF', false, ['deriveBits']);
+  const cek = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: salt,
+      info: concatBytes(enc.encode('Content-Encoding: aes128gcm'), new Uint8Array([0])) },
+    ikmKey2, 128);
+  const nonce = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: salt,
+      info: concatBytes(enc.encode('Content-Encoding: nonce'), new Uint8Array([0])) },
+    ikmKey2, 96);
+
+  // Single record: data || 0x02 (final-record delimiter, no padding).
+  const record = concatBytes(new TextEncoder().encode(plaintext), new Uint8Array([2]));
+  const cekKey = await crypto.subtle.importKey(
+    'raw', cek, { name: 'AES-GCM' }, false, ['encrypt']);
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: new Uint8Array(nonce) }, cekKey, record));
+
+  // Header: salt(16) || rs(4, BE, 4096) || idlen(1, 65) || senderPublic(65)
+  const header = new Uint8Array(16 + 4 + 1 + 65);
+  header.set(salt, 0);
+  new DataView(header.buffer).setUint32(16, 4096, false);
+  header[20] = senderPublic.length;
+  header.set(senderPublic, 21);
+
+  return concatBytes(header, ciphertext);
+}
+
+function base64url(bytes) {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function onButton() {
+  btn.disabled = true;
+  try {
+    if (!subscription) {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setStatus('通知が許可されませんでした (permission: ' + permission + ')');
+        return;
+      }
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true
+      });
+      setStatus('購読しました: ' + shortEndpoint(subscription.endpoint) +
+        '\n配信側の反映に約30秒かかることがあります。少し待ってから、もう一度「プッシュ送信」を押してください。');
+      return;
+    }
+
+    const text = msgEl.value.trim() || 'テスト通知';
+    setStatus('送信中…');
+    const body = await encryptPayload(subscription, text);
+    let resp;
+    try {
+      resp = await fetch(subscription.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Encoding': 'aes128gcm',
+          'TTL': '60',
+          'Content-Type': 'application/octet-stream'
+        },
+        body: body
+      });
+    } catch (e) {
+      setStatus('送信エラー（ネットワーク/CORS）: ' + e.message);
+      return;
+    }
+    setStatus('送信しました: HTTP ' + resp.status +
+      '\n通知が届くか確認してください。' +
+      (resp.status === 507 ? '\n※ 507 は購読直後の一時的なエラーのことがあります。約30秒待って再送してください。' : ''));
+  } catch (e) {
+    setStatus('エラー: ' + (e && e.message ? e.message : e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('reset').addEventListener('click', async (e) => {
+  e.preventDefault();
+  try {
+    const sub = await registration.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+  } catch (err) {
+    // ignore and reload anyway
+  }
+  location.reload();
+});
+
+btn.addEventListener('click', onButton);
+
+(async () => {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setStatus('このブラウザは Web プッシュに対応していません。');
+      btn.disabled = true;
+      return;
+    }
+    registration = await navigator.serviceWorker.register('sw.js');
+    await refreshSubscription();
+  } catch (e) {
+    setStatus('初期化エラー: ' + (e && e.message ? e.message : e));
+  }
+})();
+</script>
+</body>
+</html>
