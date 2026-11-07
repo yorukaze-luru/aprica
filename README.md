@@ -68,3 +68,7 @@
 Apache License 2.0（[LICENSE](LICENSE) を参照）
 
 Copyright 2026 yorukaze-luru
+
+## 開発について
+
+開発には AI アシスタント「Muse（みゅーちゃん）」を活用しています。
